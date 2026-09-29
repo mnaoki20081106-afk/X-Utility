@@ -10,6 +10,7 @@ import { generateTotp } from "./totp";
 
 type Env = DiscordEnv & {
   XUTILITY_BRIDGE_SECRET: string;
+  X_AUTH_TOKEN: string;
 };
 
 const SHADOWBAN_BUTTON_ID = "xutil:shadowban:open";
@@ -179,9 +180,36 @@ function checkField(name: string, item: ShadowbanItem) {
   };
 }
 
-async function finishShadowban(interaction: any, username: string): Promise<void> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await checkShadowban(username);
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("Xの確認処理が時間内に完了しませんでした")),
+          timeoutMs
+        );
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function finishShadowban(
+  interaction: any,
+  username: string,
+  env: Env
+): Promise<void> {
+  try {
+    const result = await withTimeout(
+      checkShadowban(username, { authToken: env.X_AUTH_TOKEN }),
+      24_000
+    );
     const checks = result.checks;
     const title =
       result.displayName && result.displayName !== result.username
@@ -271,7 +299,7 @@ async function handleInteraction(
           }
         });
       }
-      ctx.waitUntil(finishShadowban(interaction, username));
+      ctx.waitUntil(finishShadowban(interaction, username, env));
       return discordInteractionResponse({
         type: 5,
         data: { flags: 64 }
@@ -511,7 +539,8 @@ export default {
           ok:
             Boolean(bot) &&
             bot?.id === env.DISCORD_APPLICATION_ID?.trim() &&
-            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
+            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32 &&
+            (env.X_AUTH_TOKEN?.trim().length ?? 0) >= 20,
           runtime: "cloudflare-workers",
           botId: bot?.id ?? null,
           botUsername: bot?.username ?? null,
@@ -519,6 +548,8 @@ export default {
             Boolean(bot) && bot?.id === env.DISCORD_APPLICATION_ID?.trim(),
           bridgeConfigured:
             (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
+          checkerAuthConfigured:
+            (env.X_AUTH_TOKEN?.trim().length ?? 0) >= 20,
           discordError
         },
         bot ? 200 : 503
