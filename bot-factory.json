@@ -60,25 +60,6 @@
         }
       },
       {
-        "key": "X_AUTH_TOKEN",
-        "label": "Xチェック用 auth_token",
-        "type": "secret",
-        "required": true,
-        "pattern": "^.{20,}$",
-        "placeholder": "Xのauth_token Cookie",
-        "help": "シャドウバンの検索判定に使うログインセッションです。専用のチェック用Xアカウントを推奨します。値はWorker Secretとして保存され、画面やログには表示しません。",
-        "source": {
-          "title": "auth_tokenの取得",
-          "steps": [
-            "Xへチェック用アカウントでログインする",
-            "ブラウザの開発者ツールで x.com のCookieを開く",
-            "auth_token の値だけをコピーする"
-          ],
-          "url": "https://x.com/",
-          "link_label": "Xを開く ↗"
-        }
-      },
-      {
         "key": "XUTILITY_BRIDGE_SECRET",
         "label": "Xaccount-Bot連携 Secret",
         "type": "secret",
