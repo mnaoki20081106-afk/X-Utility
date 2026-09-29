@@ -349,6 +349,23 @@ async function finishShadowban(
         ? result.displayName + " (@" + result.username + ")"
         : "@" + result.username;
 
+    if (result.suspended) {
+      await editOriginalInteraction(interaction, {
+        content: "",
+        embeds: [
+          {
+            title: "X アカウントチェック — " + title,
+            description: "❄️ **凍結**\n\nこのアカウントは凍結されています。",
+            color: 0xe74c3c,
+            footer: { text: "X-Utility" },
+            timestamp: result.checkedAt
+          }
+        ],
+        components: []
+      });
+      return;
+    }
+
     await editOriginalInteraction(interaction, {
       content: "",
       embeds: [
@@ -363,6 +380,11 @@ async function finishShadowban(
               ? 0xf1c40f
               : 0x2ecc71,
           fields: [
+            {
+              name: "凍結チェック",
+              value: "✅ 凍結なし",
+              inline: false
+            },
             checkField("Media Ban", checks.mediaBan),
             checkField("Search Sensitive Ban", checks.searchSensitiveBan),
             checkField("Search Suggestion Ban", checks.searchSuggestionBan),
