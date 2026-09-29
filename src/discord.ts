@@ -222,6 +222,20 @@ export async function ensureInteractionsEndpoint(
   };
 }
 
+async function interactionFetch(
+  url: string,
+  init: RequestInit,
+  timeoutMs = 4_000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function editOriginalInteraction(
   interaction: { application_id?: string; token?: string },
   payload: unknown
@@ -231,29 +245,76 @@ export async function editOriginalInteraction(
   if (!applicationId || !token) {
     throw new Error("interaction callback metadata missing");
   }
-  const response = await fetch(
+
+  const webhookBase =
     DISCORD_API +
-      "/webhooks/" +
-      encodeURIComponent(applicationId) +
-      "/" +
-      encodeURIComponent(token) +
-      "/messages/@original",
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }
-  );
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(
-      "Discord interaction update " +
+    "/webhooks/" +
+    encodeURIComponent(applicationId) +
+    "/" +
+    encodeURIComponent(token);
+  const body = JSON.stringify(payload);
+  let lastError = "";
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const response = await interactionFetch(
+        webhookBase + "/messages/@original",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body
+        }
+      );
+      if (response.ok) return;
+      lastError =
+        "Discord interaction update " +
         response.status +
+        ": " +
+        (await response.text().catch(() => "")).slice(0, 300);
+
+      if (response.status >= 400 && response.status < 500) break;
+    } catch (error) {
+      lastError =
+        error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  // If editing the original response failed because Discord or the network
+  // briefly rejected the PATCH, still deliver the result as an ephemeral
+  // follow-up instead of leaving the user on a permanent loading state.
+  const followupPayload =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? { ...(payload as Record<string, unknown>), flags: 64 }
+      : { content: String(payload ?? ""), flags: 64 };
+
+  try {
+    const followup = await interactionFetch(
+      webhookBase + "?wait=true",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(followupPayload)
+      }
+    );
+    if (followup.ok) return;
+    const detail = await followup.text().catch(() => "");
+    throw new Error(
+      "Discord follow-up " +
+        followup.status +
         ": " +
         detail.slice(0, 300)
     );
+  } catch (error) {
+    const followupError =
+      error instanceof Error ? error.message : String(error);
+    throw new Error(
+      (lastError || "Discord interaction update failed") +
+        " / fallback: " +
+        followupError
+    );
   }
 }
+
 
 export function discordInteractionResponse(
   payload: unknown,
