@@ -679,9 +679,7 @@ export async function checkShadowban(input: string): Promise<ShadowbanResult> {
 
   try {
     const base = latest ?? (await searchTweets("from:" + username, "Latest"));
-    if (base.length === 0) {
-      checks.searchSensitiveBan = na("比較できる検索ポストがありません");
-    } else {
+    if (base.length > 0) {
       const safe = (await searchTweets(
         "from:" + username + " filter:safe",
         "Latest"
@@ -690,6 +688,20 @@ export async function checkShadowban(input: string): Promise<ShadowbanResult> {
         safe.length > 0
           ? clear("セーフ検索でも本人のポストを確認できました")
           : banned("通常検索では表示されますがセーフ検索では確認できません");
+    } else if ((profile.tweetCount ?? 0) === 0) {
+      checks.searchSensitiveBan = na("公開ポストがないため判定対象がありません");
+    } else {
+      const sensitivity =
+        profileTweets?.find((tweet) => tweet.possiblySensitive !== null)
+          ?.possiblySensitive ?? null;
+      checks.searchSensitiveBan =
+        sensitivity === true
+          ? banned("最近の公開ポストにセンシティブ判定を確認しました")
+          : sensitivity === false
+            ? clear("最近の公開ポストにセンシティブ判定は確認されませんでした")
+            : unknown(
+                "Search Ban等によりセーフ検索との比較ができず、センシティブ判定情報も取得できません"
+              );
     }
   } catch (error) {
     checks.searchSensitiveBan = unknown(
