@@ -102,18 +102,6 @@ const FEATURES: Record<string, boolean> = {
   view_counts_everywhere_api_enabled: true
 };
 
-const FIELD_TOGGLES: Record<string, boolean> = {
-  isDelegate: false,
-  withArticlePlainText: false,
-  withArticleRichContentState: true,
-  withArticleSummaryText: false,
-  withArticleVoiceOver: false,
-  withAuxiliaryUserLabels: false,
-  withDisallowedReplyControls: false,
-  withGrokAnalyze: false,
-  withPayments: false
-};
-
 let guestToken: { value: string; expiresAt: number } | null = null;
 let queryIdsRefreshedAt = 0;
 
@@ -265,7 +253,6 @@ async function graphqlRequest(
     const url = new URL(base);
     url.searchParams.set("variables", JSON.stringify(variables));
     url.searchParams.set("features", JSON.stringify(FEATURES));
-    url.searchParams.set("fieldToggles", JSON.stringify(FIELD_TOGGLES));
     response = await fetchTimeout(url, { headers });
   }
 
@@ -334,6 +321,8 @@ function tweetFromResult(result: any): SearchTweet | null {
   const username =
     tweet?.core?.user_results?.result?.legacy?.screen_name ??
     tweet?.core?.user_results?.result?.core?.screen_name ??
+    tweet?.core?.user_results?.result?.screen_name ??
+    tweet?.author?.legacy?.screen_name ??
     null;
   const media =
     legacy?.extended_entities?.media ??
@@ -526,7 +515,7 @@ async function tweetDetail(
 
 function sameUser(tweet: SearchTweet, username: string): boolean {
   return (
-    !tweet.username ||
+    typeof tweet.username === "string" &&
     tweet.username.toLowerCase() === username.toLowerCase()
   );
 }
