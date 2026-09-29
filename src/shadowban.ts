@@ -31,6 +31,9 @@ const USER_AGENT =
 
 const OPERATION_IDS: Record<string, string> = {
   UserByScreenName: "Gb-d6r0vxPOADdG62OEBpQ",
+  UserTweets: "SXVCYB8XHSS25nzIljNtZA",
+  UserTweetsAndReplies: "qUpkZU6eN8MbtQb7rC_pYg",
+  UserMedia: "VyudDWQnr9vJNw7GasFz2g",
   SearchTimeline: "hyPfJYJ_XAtDYoslQc-Rgg",
   TweetDetail: "XMOz5h24KAZ86qKffKTLdQ"
 };
@@ -223,7 +226,13 @@ async function discoverCurrentQueryIds(): Promise<void> {
 }
 
 async function graphqlRequest(
-  operationName: "UserByScreenName" | "SearchTimeline" | "TweetDetail",
+  operationName:
+    | "UserByScreenName"
+    | "UserTweets"
+    | "UserTweetsAndReplies"
+    | "UserMedia"
+    | "SearchTimeline"
+    | "TweetDetail",
   variables: Record<string, unknown>,
   retried = false
 ): Promise<any> {
@@ -389,6 +398,7 @@ async function searchTweets(
 }
 
 async function profileByUsername(username: string): Promise<{
+  userId: string | null;
   displayName: string;
   protected: boolean;
   suspended: boolean;
@@ -401,7 +411,12 @@ async function profileByUsername(username: string): Promise<{
   const user = payload?.data?.user?.result;
   if (!user) throw new Error("Xアカウントが見つかりません");
   if (user.__typename !== "User") {
+    const unavailableText = JSON.stringify(user).toLowerCase();
+    if (!/suspend|withheld|unavailable/.test(unavailableText)) {
+      throw new Error("Xアカウントが見つからないか、公開情報を取得できません");
+    }
     return {
+      userId: null,
       displayName: username,
       protected: false,
       suspended: true,
@@ -410,6 +425,7 @@ async function profileByUsername(username: string): Promise<{
   }
   const legacy = user.legacy ?? {};
   return {
+    userId: user.rest_id ? String(user.rest_id) : null,
     displayName: String(legacy.name ?? username),
     protected: Boolean(legacy.protected),
     suspended: false,
@@ -418,6 +434,31 @@ async function profileByUsername(username: string): Promise<{
         ? Number(legacy.statuses_count)
         : null
   };
+}
+
+async function userTimeline(
+  operationName: "UserTweets" | "UserTweetsAndReplies" | "UserMedia",
+  userId: string
+): Promise<SearchTweet[]> {
+  const variables: Record<string, unknown> = {
+    userId,
+    count: 20,
+    includePromotedContent: false,
+    withVoice: true,
+    withV2Timeline: true
+  };
+  if (operationName === "UserTweets") {
+    variables.withQuickPromoteEligibilityTweetFields = true;
+  }
+  if (operationName === "UserTweetsAndReplies") {
+    variables.withCommunity = true;
+  }
+  if (operationName === "UserMedia") {
+    variables.withClientEventToken = false;
+    variables.withBirdwatchNotes = false;
+  }
+  const payload = await graphqlRequest(operationName, variables);
+  return collectTweetResults(payload);
 }
 
 async function searchSuggestionVisible(username: string): Promise<boolean> {
@@ -587,6 +628,18 @@ export async function checkShadowban(input: string): Promise<ShadowbanResult> {
     };
   }
 
+  let profileTweets: SearchTweet[] | null = null;
+  if (profile.userId) {
+    try {
+      profileTweets = (await userTimeline(
+        "UserTweets",
+        profile.userId
+      )).filter((tweet) => sameUser(tweet, username));
+    } catch {
+      profileTweets = null;
+    }
+  }
+
   let latest: SearchTweet[] | null = null;
   try {
     latest = (await searchTweets("from:" + username, "Latest")).filter((tweet) =>
@@ -594,10 +647,16 @@ export async function checkShadowban(input: string): Promise<ShadowbanResult> {
     );
     if (latest.length > 0) {
       checks.searchBan = clear("最新検索で本人のポストを確認できました");
+    } else if (profileTweets && profileTweets.length > 0) {
+      checks.searchBan = banned(
+        "プロフィールには最近の公開ポストがありますが、最新検索で確認できませんでした"
+      );
     } else if ((profile.tweetCount ?? 0) === 0) {
       checks.searchBan = na("公開ポストがないため判定対象がありません");
     } else {
-      checks.searchBan = banned("最新検索で本人のポストを確認できませんでした");
+      checks.searchBan = unknown(
+        "投稿数はありますが、比較できる最近の公開ポストを取得できませんでした"
+      );
     }
   } catch (error) {
     checks.searchBan = unknown(
@@ -640,21 +699,27 @@ export async function checkShadowban(input: string): Promise<ShadowbanResult> {
   }
 
   try {
-    const latestMedia = (await searchTweets(
-      "from:" + username + " filter:media",
-      "Latest"
-    )).filter((tweet) => sameUser(tweet, username));
-    if (latestMedia.length === 0) {
-      checks.mediaBan = na("検索で確認できるメディア付きポストがありません");
+    if (!profile.userId) {
+      checks.mediaBan = unknown("プロフィールのユーザーIDを取得できません");
     } else {
-      const topMedia = (await searchTweets(
-        "from:" + username + " filter:media",
-        "Top"
+      const profileMedia = (await userTimeline(
+        "UserMedia",
+        profile.userId
       )).filter((tweet) => sameUser(tweet, username));
-      checks.mediaBan =
-        topMedia.length > 0
-          ? clear("メディア検索のTopで本人のポストを確認できました")
-          : banned("Latestにはありますがメディア検索のTopで確認できません");
+      if (profileMedia.length === 0) {
+        checks.mediaBan = na("判定に使える最近のメディア投稿がありません");
+      } else {
+        const topMedia = (await searchTweets(
+          "from:" + username + " filter:media",
+          "Top"
+        )).filter((tweet) => sameUser(tweet, username));
+        checks.mediaBan =
+          topMedia.length > 0
+            ? clear("メディア投稿を検索のTopでも確認できました")
+            : banned(
+                "プロフィールにはメディア投稿がありますが、メディア検索のTopで確認できません"
+              );
+      }
     }
   } catch (error) {
     checks.mediaBan = unknown(
@@ -664,12 +729,27 @@ export async function checkShadowban(input: string): Promise<ShadowbanResult> {
   }
 
   try {
-    const replyCandidates = (await searchTweets(
-      "from:" + username + " filter:replies",
-      "Latest"
-    ))
-      .filter((tweet) => sameUser(tweet, username))
-      .filter((tweet) => Boolean(tweet.parentId));
+    let replyCandidates: SearchTweet[] = [];
+    if (profile.userId) {
+      try {
+        replyCandidates = (await userTimeline(
+          "UserTweetsAndReplies",
+          profile.userId
+        ))
+          .filter((tweet) => sameUser(tweet, username))
+          .filter((tweet) => Boolean(tweet.parentId));
+      } catch {
+        replyCandidates = [];
+      }
+    }
+    if (replyCandidates.length === 0) {
+      replyCandidates = (await searchTweets(
+        "from:" + username + " filter:replies",
+        "Latest"
+      ))
+        .filter((tweet) => sameUser(tweet, username))
+        .filter((tweet) => Boolean(tweet.parentId));
+    }
 
     const target = replyCandidates[0];
     if (!target?.parentId) {
