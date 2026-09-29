@@ -44,18 +44,8 @@ function shadowbanPanelPayload() {
     embeds: [
       {
         title: "X シャドウバンチェック",
-        description:
-          "Xの検索・検索候補・返信表示を確認して、6項目の状態をチェックします。\n" +
-          "取得できない項目は推測せず「判定不能」と表示します。",
-        color: 0x111111,
-        fields: [
-          {
-            name: "チェック項目",
-            value:
-              "Media Ban / Search Sensitive Ban / Search Suggestion Ban / " +
-              "Search Ban / Ghost Ban / Reply Deboosting"
-          }
-        ]
+        description: "Xの垢のIDを入力してください",
+        color: 0x111111
       }
     ],
     components: [
@@ -65,7 +55,7 @@ function shadowbanPanelPayload() {
           {
             type: 2,
             style: 1,
-            label: "シャドウバンをチェック",
+            label: "チェックする",
             custom_id: SHADOWBAN_BUTTON_ID
           }
         ]
@@ -130,12 +120,12 @@ function shadowbanModal() {
             {
               type: 4,
               custom_id: SHADOWBAN_USERNAME_ID,
-              label: "Xユーザー名",
+              label: "Xの垢のID",
               style: 1,
               min_length: 1,
               max_length: 16,
               required: true,
-              placeholder: "@username"
+              placeholder: "@付きでも無しでもOK"
             }
           ]
         }
@@ -319,9 +309,35 @@ async function withTimeout<T>(
 async function finishShadowban(
   interaction: any,
   username: string,
+  actorId: string,
   env: Env
 ): Promise<void> {
   try {
+    const userLimit = await env.SHADOWBAN_USER_LIMITER.limit({
+      key: actorId
+    });
+    if (!userLimit.success) {
+      await editOriginalInteraction(interaction, {
+        content: "チェック回数が多すぎます。1分あたり2回まで利用できます。",
+        embeds: [],
+        components: []
+      });
+      return;
+    }
+
+    const globalLimit = await env.SHADOWBAN_GLOBAL_LIMITER.limit({
+      key: "shadowban-check"
+    });
+    if (!globalLimit.success) {
+      await editOriginalInteraction(interaction, {
+        content:
+          "現在チェックが集中しています。少し時間を空けてから再実行してください。",
+        embeds: [],
+        components: []
+      });
+      return;
+    }
+
     const result = await withTimeout(
       checkShadowban(username),
       24_000
@@ -363,6 +379,26 @@ async function finishShadowban(
     await editOriginalInteraction(interaction, {
       content:
         "チェックに失敗しました: " +
+        (error instanceof Error ? error.message : String(error)),
+      embeds: [],
+      components: []
+    });
+  }
+}
+
+async function finishTotp(
+  interaction: any,
+  secret: string,
+  env: Env
+): Promise<void> {
+  try {
+    const payload = await totpResultPayload(secret, env);
+    delete payload.flags;
+    await editOriginalInteraction(interaction, payload);
+  } catch (error) {
+    await editOriginalInteraction(interaction, {
+      content:
+        "2FAコードを生成できませんでした: " +
         (error instanceof Error ? error.message : String(error)),
       embeds: [],
       components: []
@@ -428,22 +464,11 @@ async function handleInteraction(
 
     if (customId === TOTP_MODAL_ID) {
       const secret = modalValue(interaction, TOTP_SECRET_ID);
-      try {
-        return discordInteractionResponse({
-          type: 4,
-          data: await totpResultPayload(secret, env)
-        });
-      } catch (error) {
-        return discordInteractionResponse({
-          type: 4,
-          data: {
-            flags: 64,
-            content:
-              "2FAコードを生成できませんでした: " +
-              (error instanceof Error ? error.message : String(error))
-          }
-        });
-      }
+      ctx.waitUntil(finishTotp(interaction, secret, env));
+      return discordInteractionResponse({
+        type: 5,
+        data: { flags: 64 }
+      });
     }
 
     if (customId === SHADOWBAN_MODAL_ID) {
@@ -481,35 +506,9 @@ async function handleInteraction(
         });
       }
 
-      const userLimit = await env.SHADOWBAN_USER_LIMITER.limit({
-        key: actorId
-      });
-      if (!userLimit.success) {
-        return discordInteractionResponse({
-          type: 4,
-          data: {
-            flags: 64,
-            content:
-              "チェック回数が多すぎます。1分あたり2回まで利用できます。"
-          }
-        });
-      }
-
-      const globalLimit = await env.SHADOWBAN_GLOBAL_LIMITER.limit({
-        key: "shadowban-check"
-      });
-      if (!globalLimit.success) {
-        return discordInteractionResponse({
-          type: 4,
-          data: {
-            flags: 64,
-            content:
-              "現在チェックが集中しています。少し時間を空けてから再実行してください。"
-          }
-        });
-      }
-
-      ctx.waitUntil(finishShadowban(interaction, username, env));
+      ctx.waitUntil(
+        finishShadowban(interaction, username, actorId, env)
+      );
       return discordInteractionResponse({
         type: 5,
         data: { flags: 64 }
