@@ -44,8 +44,8 @@ function shadowbanPanelPayload() {
   return {
     embeds: [
       {
-        title: "X シャドウバンチェック",
-        description: "Xの垢のIDを入力してください",
+        title: "X 垢状態チェック",
+        description:\n          "シャドウバン・凍結をチェックできます。\\n" +\n          "Xの垢のIDを入力してください。",
         color: 0x111111
       }
     ],
@@ -113,7 +113,7 @@ function shadowbanModal() {
     type: 9,
     data: {
       custom_id: SHADOWBAN_MODAL_ID,
-      title: "X シャドウバンチェック",
+      title: "X 垢状態チェック",
       components: [
         {
           type: 1,
@@ -354,7 +354,7 @@ async function finishShadowban(
         content: "",
         embeds: [
           {
-            title: "X アカウントチェック — " + title,
+            title: "X 垢状態チェック — " + title,
             description: "❄️ **凍結**\n\nこのアカウントは凍結されています。",
             color: 0xe74c3c,
             footer: { text: "X-Utility" },
@@ -370,7 +370,7 @@ async function finishShadowban(
       content: "",
       embeds: [
         {
-          title: "X シャドウバンチェック — " + title,
+          title: "X 垢状態チェック — " + title,
           description:
             "X上の公開表示を観測した結果です。仕様変更や検索側の一時制限により、" +
             "結果が変動する場合があります。",
@@ -547,7 +547,7 @@ async function handleInteraction(
         type: 4,
         data: {
           flags: 64,
-          content: "シャドウバンを確認しています..."
+          content: "Xの垢状態を確認しています..."
         }
       });
     }
