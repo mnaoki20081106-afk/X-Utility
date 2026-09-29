@@ -633,49 +633,49 @@ export async function checkShadowban(
     };
   }
 
-  const [profileTweetsResult, latestResult, suggestionResult] =
-    await Promise.allSettled([
-      profile.userId
-        ? userTweets(profile.userId, username)
-        : Promise.resolve([] as SearchTweet[]),
-      searchTweets("from:" + username, "Latest", username),
-      searchSuggestionVisible(username, profile.displayName)
-    ]);
+  if ((profile.tweetCount ?? 0) === 0) {
+    const item = na("ポストがないため判定対象外です");
+    return {
+      username,
+      displayName: profile.displayName,
+      protected: false,
+      suspended: false,
+      tweetCount: profile.tweetCount,
+      checkedAt: new Date().toISOString(),
+      checks: {
+        mediaBan: item,
+        searchSensitiveBan: item,
+        searchSuggestionBan: item,
+        searchBan: item,
+        ghostBan: item,
+        replyDeboosting: item
+      }
+    };
+  }
 
-  const profileTweets =
-    profileTweetsResult.status === "fulfilled"
-      ? profileTweetsResult.value
-      : null;
-  const latest =
-    latestResult.status === "fulfilled"
-      ? latestResult.value
-      : null;
+  const [searchResult, suggestionResult] = await Promise.allSettled([
+    searchTweets("from:" + username, "Top", username),
+    searchSuggestionVisible(username, profile.displayName)
+  ]);
 
-  if (latestResult.status === "rejected") {
+  if (searchResult.status === "rejected") {
     checks.searchBan = unknown(
-      "Xの公開検索から判定できません: " +
-        (latestResult.reason instanceof Error
-          ? latestResult.reason.message
-          : String(latestResult.reason))
+      "Top検索を取得できません: " +
+        (searchResult.reason instanceof Error
+          ? searchResult.reason.message
+          : String(searchResult.reason))
     );
-  } else if (latestResult.value.length > 0) {
-    checks.searchBan = clear("最新検索で本人のポストを確認できました");
-  } else if (profileTweets && profileTweets.length > 0) {
-    checks.searchBan = banned(
-      "プロフィールには最近の公開ポストがありますが、最新検索で確認できませんでした"
-    );
-  } else if ((profile.tweetCount ?? 0) === 0) {
-    checks.searchBan = na("公開ポストがないため判定対象がありません");
   } else {
-    checks.searchBan = unknown(
-      "投稿数はありますが、比較できる最近の公開ポストを取得できませんでした"
-    );
+    checks.searchBan =
+      searchResult.value.length > 0
+        ? clear("Top検索に本人のポストを確認できました")
+        : banned("Top検索に本人のポストが見つかりませんでした");
   }
 
   if (suggestionResult.status === "fulfilled") {
     checks.searchSuggestionBan = suggestionResult.value
-      ? clear("検索候補にアカウントを確認できました")
-      : banned("検索候補にアカウントを確認できませんでした");
+      ? clear("検索候補に本人のアカウントを確認できました")
+      : banned("検索候補に本人のアカウントが見つかりませんでした");
   } else {
     checks.searchSuggestionBan = unknown(
       "検索候補を取得できません: " +
@@ -685,174 +685,10 @@ export async function checkShadowban(
     );
   }
 
-  await Promise.all([
-    (async () => {
-      try {
-        if (latest && latest.length > 0) {
-          const safe = await searchTweets(
-            "from:" + username + " filter:safe",
-            "Latest",
-            username
-          );
-          checks.searchSensitiveBan =
-            safe.length > 0
-              ? clear("セーフ検索でも本人のポストを確認できました")
-              : banned(
-                  "通常検索では表示されますがセーフ検索では確認できません"
-                );
-          return;
-        }
-
-        if ((profile.tweetCount ?? 0) === 0) {
-          checks.searchSensitiveBan = na(
-            "公開ポストがないため判定対象がありません"
-          );
-          return;
-        }
-
-        const sensitivity =
-          profileTweets?.find((tweet) => tweet.possiblySensitive !== null)
-            ?.possiblySensitive ?? null;
-        checks.searchSensitiveBan =
-          sensitivity === true
-            ? banned("最近の公開ポストにセンシティブ判定を確認しました")
-            : sensitivity === false
-              ? clear(
-                  "最近の公開ポストにセンシティブ判定は確認されませんでした"
-                )
-              : unknown(
-                  "公開検索では比較できず、センシティブ判定情報も取得できません"
-                );
-      } catch (error) {
-        checks.searchSensitiveBan = unknown(
-          "セーフ検索を比較できません: " +
-            (error instanceof Error ? error.message : String(error))
-        );
-      }
-    })(),
-
-    (async () => {
-      try {
-        if (!profileTweets) {
-          checks.mediaBan = unknown(
-            "プロフィール側の最近のポストを取得できません"
-          );
-          return;
-        }
-
-        const profileMedia = profileTweets.filter(
-          (tweet) => tweet.hasMedia
-        );
-        if (profileMedia.length === 0) {
-          checks.mediaBan = na(
-            "判定に使える最近のメディア投稿がありません"
-          );
-          return;
-        }
-
-        const searchedMedia = await searchTweets(
-          "from:" + username + " filter:media",
-          "Latest",
-          username
-        );
-        const searchedIds = new Set(
-          searchedMedia.map((tweet) => tweet.id)
-        );
-        const matched = profileMedia.some((tweet) =>
-          searchedIds.has(tweet.id)
-        );
-
-        checks.mediaBan = matched
-          ? clear(
-              "プロフィールの最近のメディア投稿をメディア検索でも確認できました"
-            )
-          : banned(
-              "プロフィールには最近のメディア投稿がありますが、メディア検索で確認できませんでした"
-            );
-      } catch (error) {
-        checks.mediaBan = unknown(
-          "メディア検索を比較できません: " +
-            (error instanceof Error ? error.message : String(error))
-        );
-      }
-    })(),
-
-    (async () => {
-      try {
-        const replyCandidates = await searchTweets(
-          "from:" + username + " filter:replies",
-          "Latest",
-          username
-        );
-        const target = replyCandidates.find((tweet) =>
-          Boolean(tweet.parentId)
-        );
-
-        if (!target?.parentId) {
-          checks.ghostBan = na(
-            "判定に使える最近の返信がありません"
-          );
-          checks.replyDeboosting = na(
-            "判定に使える最近の返信がありません"
-          );
-          return;
-        }
-
-        const first = await tweetDetail(target.parentId);
-        const initialIds = new Set(
-          collectTweetResults(first).map((tweet) => tweet.id)
-        );
-
-        if (initialIds.has(target.id)) {
-          checks.ghostBan = clear(
-            "返信スレッドで対象リプライを確認できました"
-          );
-          checks.replyDeboosting = clear(
-            "対象リプライは初期表示範囲で確認できました"
-          );
-          return;
-        }
-
-        const cursor = collectShowMoreCursors(first)[0];
-        if (!cursor) {
-          checks.ghostBan = unknown(
-            "返信検索では存在しますが、スレッド初期表示で確認できませんでした"
-          );
-          checks.replyDeboosting = unknown(
-            "追加返信カーソルがなく、表示順位を確定できません"
-          );
-          return;
-        }
-
-        const page = await tweetDetail(target.parentId, cursor);
-        const ids = new Set(
-          collectTweetResults(page).map((tweet) => tweet.id)
-        );
-
-        if (ids.has(target.id)) {
-          checks.ghostBan = clear(
-            "追加返信を開くと対象リプライを確認できました"
-          );
-          checks.replyDeboosting = banned(
-            "対象リプライが初期表示から外れ、追加返信側で確認されました"
-          );
-        } else {
-          checks.ghostBan = banned(
-            "返信検索では存在しますが、スレッドと追加返信で確認できませんでした"
-          );
-          checks.replyDeboosting = unknown(
-            "対象返信を確認できないため、降格だけを分離判定できません"
-          );
-        }
-      } catch (error) {
-        const detail =
-          "返信スレッドを確認できません: " +
-          (error instanceof Error ? error.message : String(error));
-        checks.ghostBan = unknown(detail);
-        checks.replyDeboosting = unknown(detail);
-      }
-    })()
-  ]);
+  checks.mediaBan = unknown("現行本家の判定式は非公開です");
+  checks.searchSensitiveBan = unknown("現行本家の判定式は非公開です");
+  checks.ghostBan = unknown("本家では現在メンテナンス中です");
+  checks.replyDeboosting = unknown("本家では現在メンテナンス中です");
 
   return {
     username,
