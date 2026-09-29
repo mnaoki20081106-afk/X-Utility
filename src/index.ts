@@ -403,9 +403,11 @@ async function handleInteraction(
       try {
         const token = customId.slice(TOTP_REFRESH_PREFIX.length);
         const secret = await openTotpSecret(token, env);
+        const data = await totpResultPayload(secret, env);
+        delete data.flags;
         return discordInteractionResponse({
           type: 7,
-          data: await totpResultPayload(secret, env)
+          data
         });
       } catch (error) {
         return discordInteractionResponse({
