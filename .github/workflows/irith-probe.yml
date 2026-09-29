@@ -18,7 +18,7 @@ jobs:
         shell: bash
         run: |
           node <<'NODE'
-          const crypto = require("crypto");
+          const crypto = await import("node:crypto");
           const base = "https://irith.io";
           const headers = {
             "content-type": "application/json",
