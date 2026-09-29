@@ -106,7 +106,7 @@
       ],
       "notes": [
         "Privileged Gateway Intentsは不要です。",
-        "2FAシークレットはDiscordやWorkerへ送信せず、パネルから開くページの端末内JavaScriptだけでTOTPを生成します。",
+        "2FAキーはDiscordモーダルで受け取り、TOTPをEphemeral表示します。DB/KV/ログには保存せず、更新用の状態だけを暗号化してEphemeralメッセージ内に保持します。",
         "Interactions Endpoint URL: https://<Factoryで発行されたWorker URL>/interactions"
       ]
     }
