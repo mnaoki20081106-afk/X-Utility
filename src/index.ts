@@ -341,7 +341,7 @@ async function finishShadowban(
 
     const result = await withTimeout(
       checkShadowban(username),
-      24_000
+      14_000
     );
     const checks = result.checks;
     const title =
@@ -465,11 +465,22 @@ async function handleInteraction(
 
     if (customId === TOTP_MODAL_ID) {
       const secret = modalValue(interaction, TOTP_SECRET_ID);
-      ctx.waitUntil(finishTotp(interaction, secret, env));
-      return discordInteractionResponse({
-        type: 5,
-        data: { flags: 64 }
-      });
+      try {
+        return discordInteractionResponse({
+          type: 4,
+          data: await totpResultPayload(secret, env)
+        });
+      } catch (error) {
+        return discordInteractionResponse({
+          type: 4,
+          data: {
+            flags: 64,
+            content:
+              "2FAコードを生成できませんでした: " +
+              (error instanceof Error ? error.message : String(error))
+          }
+        });
+      }
     }
 
     if (customId === SHADOWBAN_MODAL_ID) {
@@ -511,8 +522,11 @@ async function handleInteraction(
         finishShadowban(interaction, username, actorId, env)
       );
       return discordInteractionResponse({
-        type: 5,
-        data: { flags: 64 }
+        type: 4,
+        data: {
+          flags: 64,
+          content: "シャドウバンを確認しています..."
+        }
       });
     }
 
