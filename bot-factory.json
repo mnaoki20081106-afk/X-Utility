@@ -57,7 +57,9 @@
           ],
           "url": "https://discord.com/developers/applications",
           "link_label": "Discord Developer Portalを開く ↗"
-        }
+        },
+        "pattern": "^[0-9a-fA-F]{64}$",
+        "placeholder": "64文字のPublic Key"
       },
       {
         "key": "XUTILITY_BRIDGE_SECRET",
