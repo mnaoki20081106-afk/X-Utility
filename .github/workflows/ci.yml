@@ -20,3 +20,50 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run typecheck
+
+  inspect-irith-public-client:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect public IRith client contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/irith
+          urls=(
+            "https://irith.io/_next/static/chunks/app/page-52ce6de76212ba0c.js"
+            "https://irith.io/_next/static/chunks/4873-31ba0b9b628a9824.js"
+            "https://irith.io/_next/static/chunks/4064-80a2f78bde51dea9.js"
+            "https://irith.io/_next/static/chunks/3670-68de15abc875e13c.js"
+            "https://irith.io/_next/static/chunks/7513-418b4b20036a60ea.js"
+            "https://irith.io/_next/static/chunks/551-fb38e00932da4cf5.js"
+          )
+          i=0
+          for url in "${urls[@]}"; do
+            i=$((i+1))
+            code=$(curl -L --compressed -A 'Mozilla/5.0' -sS -o "/tmp/irith/$i.js" -w '%{http_code}' "$url" || true)
+            echo "chunk_$i HTTP=$code bytes=$(wc -c < "/tmp/irith/$i.js" 2>/dev/null || echo 0)"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          terms = [
+            "Media Ban","Search Sensitive Ban","Search Suggestion Ban","Search Ban",
+            "Ghost Ban","Reply Deboosting","screen_name","username","fetch(",
+            "/api/","typeahead","SearchTimeline","TweetDetail","UserByScreenName",
+            "guest/activate","filter:safe","filter:media","filter:replies",
+            "from:","shadowban","recaptcha","turnstile"
+          ]
+          for p in sorted(Path("/tmp/irith").glob("*.js")):
+              s=p.read_text("utf-8",errors="replace")
+              print(f"=== {p.name} ===")
+              urls=sorted(set(re.findall(r'https?://[^"\'\\ ]+',s)))
+              api=sorted(set(re.findall(r'["\']([^"\']*(?:/api/|api\.)[^"\']*)["\']',s)))
+              if urls: print("URLS", urls[:30])
+              if api: print("API_STRINGS", api[:50])
+              for term in terms:
+                  pos=s.lower().find(term.lower())
+                  if pos>=0:
+                      a=max(0,pos-350); b=min(len(s),pos+700)
+                      snippet=s[a:b].replace("\n"," ")
+                      print("TERM",term,repr(snippet))
+          PY
