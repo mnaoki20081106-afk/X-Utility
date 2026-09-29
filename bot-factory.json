@@ -103,5 +103,6 @@
         "Interactions Endpoint URLは、Xaccount-Botから最初にパネルを設置する際にX-UtilityがDiscord APIへ自動設定・修復します。"
       ]
     }
-  }
+  },
+  "health_url": "https://x-utility.mnaoki20081106.workers.dev/health"
 }
