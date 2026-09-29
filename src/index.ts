@@ -703,32 +703,57 @@ export default {
 
     if (url.pathname === "/" || url.pathname === "/health") {
       let bot: { id: string; username: string } | null = null;
+      let interactionConfig:
+        | {
+            applicationId: string;
+            verifyKeyAvailable: boolean;
+            endpoint: string;
+            changed: boolean;
+          }
+        | null = null;
       let discordError: string | null = null;
+
       try {
-        bot = await discordJson(env, "/users/@me");
+        [bot, interactionConfig] = await Promise.all([
+          discordJson<{ id: string; username: string }>(env, "/users/@me"),
+          ensureInteractionsEndpoint(env, url.origin)
+        ]);
       } catch (error) {
         discordError = error instanceof Error ? error.message : String(error);
       }
+
+      const applicationMatchesToken =
+        Boolean(bot) &&
+        bot?.id === env.DISCORD_APPLICATION_ID?.trim();
+      const bridgeConfigured =
+        (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32;
+      const interactionsReady =
+        Boolean(interactionConfig?.verifyKeyAvailable) &&
+        interactionConfig?.endpoint ===
+          url.origin.replace(/\/+$/g, "") + "/interactions";
+      const ok =
+        applicationMatchesToken &&
+        bridgeConfigured &&
+        interactionsReady &&
+        !discordError;
+
       return json(
         {
-          ok:
-            Boolean(bot) &&
-            bot?.id === env.DISCORD_APPLICATION_ID?.trim() &&
-            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
+          ok,
           runtime: "cloudflare-workers",
           botId: bot?.id ?? null,
           botUsername: bot?.username ?? null,
-          applicationMatchesToken:
-            Boolean(bot) && bot?.id === env.DISCORD_APPLICATION_ID?.trim(),
-          bridgeConfigured:
-            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
+          applicationMatchesToken,
+          bridgeConfigured,
+          interactionsReady,
+          interactionsEndpoint: interactionConfig?.endpoint ?? null,
+          endpointWasRepaired: interactionConfig?.changed ?? false,
           configuredPublicKeyPresent:
             /^[0-9a-fA-F]{64}$/.test(env.DISCORD_PUBLIC_KEY?.trim() ?? ""),
           publicKeyResolution: "automatic-from-discord-application",
-          interactionsPath: "/interactions",
           discordError
         },
-        bot ? 200 : 503
+        ok ? 200 : 503
       );
     }
 
