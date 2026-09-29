@@ -2,6 +2,7 @@ import {
   discordInteractionResponse,
   discordJson,
   editOriginalInteraction,
+  ensureInteractionsEndpoint,
   verifyInteraction,
   type DiscordEnv
 } from "./discord";
@@ -648,6 +649,9 @@ async function handleBridge(
 
     const guildId = match[1]!;
     const kind = match[2] as "shadowban" | "2fa";
+
+    await ensureInteractionsEndpoint(env, url.origin);
+
     const channelId = String(input.channelId ?? "").trim();
     if (!/^\d{17,20}$/.test(channelId)) {
       return json({ error: "INVALID_CHANNEL_ID" }, 400);
@@ -710,8 +714,7 @@ export default {
           ok:
             Boolean(bot) &&
             bot?.id === env.DISCORD_APPLICATION_ID?.trim() &&
-            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32 &&
-            /^[0-9a-fA-F]{64}$/.test(env.DISCORD_PUBLIC_KEY?.trim() ?? ""),
+            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
           runtime: "cloudflare-workers",
           botId: bot?.id ?? null,
           botUsername: bot?.username ?? null,
@@ -719,8 +722,9 @@ export default {
             Boolean(bot) && bot?.id === env.DISCORD_APPLICATION_ID?.trim(),
           bridgeConfigured:
             (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
-          publicKeyFormatValid:
+          configuredPublicKeyPresent:
             /^[0-9a-fA-F]{64}$/.test(env.DISCORD_PUBLIC_KEY?.trim() ?? ""),
+          publicKeyResolution: "automatic-from-discord-application",
           interactionsPath: "/interactions",
           discordError
         },
