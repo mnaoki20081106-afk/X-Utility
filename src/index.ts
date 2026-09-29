@@ -718,6 +718,9 @@ export default {
             Boolean(bot) && bot?.id === env.DISCORD_APPLICATION_ID?.trim(),
           bridgeConfigured:
             (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
+          publicKeyFormatValid:
+            /^[0-9a-fA-F]{64}$/.test(env.DISCORD_PUBLIC_KEY?.trim() ?? ""),
+          interactionsPath: "/interactions",
           discordError
         },
         bot ? 200 : 503
@@ -725,7 +728,25 @@ export default {
     }
 
     if (url.pathname === "/interactions" && request.method === "POST") {
-      return handleInteraction(request, env, ctx);
+      try {
+        return await handleInteraction(request, env, ctx);
+      } catch (error) {
+        console.error(
+          "interaction handler failed:",
+          error instanceof Error ? error.message : String(error)
+        );
+        return discordInteractionResponse(
+          {
+            type: 4,
+            data: {
+              flags: 64,
+              content:
+                "X-Utility側でエラーが発生しました。BOTを再デプロイして設定を確認してください。"
+            }
+          },
+          200
+        );
+      }
     }
 
     const bridge = await handleBridge(request, env, url);
