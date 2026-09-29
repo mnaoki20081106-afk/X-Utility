@@ -3,10 +3,30 @@
   "name": "x-utility",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": true,
   "preview_urls": true,
   "build": {
     "command": "npm run typecheck"
-  }
+  },
+  "ratelimits": [
+    {
+      "name": "SHADOWBAN_USER_LIMITER",
+      "namespace_id": "86072901",
+      "simple": {
+        "limit": 2,
+        "period": 60
+      }
+    },
+    {
+      "name": "SHADOWBAN_GLOBAL_LIMITER",
+      "namespace_id": "86072902",
+      "simple": {
+        "limit": 8,
+        "period": 60
+      }
+    }
+  ]
 }
