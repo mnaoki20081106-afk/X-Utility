@@ -478,7 +478,7 @@ async function handleInteraction(
           type: 4,
           data: {
             flags: 64,
-            content: "Xユーザー名を入力してください"
+            content: "Xの垢のIDを入力してください"
           }
         });
       }
@@ -501,7 +501,7 @@ async function handleInteraction(
           type: 4,
           data: {
             flags: 64,
-            content: "有効なXユーザー名を入力してください"
+            content: "有効なXの垢のIDを入力してください"
           }
         });
       }
@@ -710,7 +710,8 @@ export default {
           ok:
             Boolean(bot) &&
             bot?.id === env.DISCORD_APPLICATION_ID?.trim() &&
-            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
+            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32 &&
+            /^[0-9a-fA-F]{64}$/.test(env.DISCORD_PUBLIC_KEY?.trim() ?? ""),
           runtime: "cloudflare-workers",
           botId: bot?.id ?? null,
           botUsername: bot?.username ?? null,
