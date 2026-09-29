@@ -31,9 +31,27 @@ jobs:
             "sec-fetch-dest": "empty",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36"
           };
+          const visitRes = await fetch(base + "/", {
+            headers: {
+              "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "accept-language": headers["accept-language"],
+              "sec-fetch-site": "none",
+              "sec-fetch-mode": "navigate",
+              "sec-fetch-dest": "document",
+              "user-agent": headers["user-agent"]
+            },
+            redirect: "follow"
+          });
+          console.log("visit_status=" + visitRes.status);
+          const setCookies = typeof visitRes.headers.getSetCookie === "function"
+            ? visitRes.headers.getSetCookie()
+            : [visitRes.headers.get("set-cookie")].filter(Boolean);
+          console.log("visit_cookie_names=" + setCookies.map(x => x.split("=",1)[0]).join(","));
+          const cookie = setCookies.map(x => x.split(";")[0]).join("; ");
+
           const challengeRes = await fetch(base + "/api/auth/challenge", {
             method: "POST",
-            headers,
+            headers: { ...headers, cookie },
             body: "{}"
           });
           console.log("challenge_status=" + challengeRes.status);
