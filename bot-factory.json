@@ -100,8 +100,8 @@
         {
           "id": "post-deploy-interactions-url",
           "label": "初回デプロイ後: Interactions Endpoint URLを設定",
-          "required": false,
-          "description": "Factoryで発行されたWorker URLを使い、Discord Developer Portal > General Information > Interactions Endpoint URLへ「https://<Worker URL>/interactions」を設定します。",
+          "required": true,
+          "description": "Factoryで発行されたWorker URLを使い、Discord Developer Portal > General Information > Interactions Endpoint URLへ「https://<Worker URL>/interactions」を設定してください。これが未設定・別URLだとボタンやモーダルが「アプリケーションが時間内に応答しませんでした」になります。",
           "path": "Discord Developer Portal > General Information > Interactions Endpoint URL",
           "url": "https://discord.com/developers/applications"
         }
