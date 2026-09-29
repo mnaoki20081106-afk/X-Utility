@@ -13,7 +13,6 @@ type RateLimiterBinding = {
 
 type Env = DiscordEnv & {
   XUTILITY_BRIDGE_SECRET: string;
-  X_AUTH_TOKEN: string;
   SHADOWBAN_USER_LIMITER: RateLimiterBinding;
   SHADOWBAN_GLOBAL_LIMITER: RateLimiterBinding;
 };
@@ -183,7 +182,7 @@ async function finishShadowban(
 ): Promise<void> {
   try {
     const result = await withTimeout(
-      checkShadowban(username, { authToken: env.X_AUTH_TOKEN }),
+      checkShadowban(username),
       24_000
     );
     const checks = result.checks;
@@ -658,8 +657,7 @@ export default {
           ok:
             Boolean(bot) &&
             bot?.id === env.DISCORD_APPLICATION_ID?.trim() &&
-            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32 &&
-            (env.X_AUTH_TOKEN?.trim().length ?? 0) >= 20,
+            (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
           runtime: "cloudflare-workers",
           botId: bot?.id ?? null,
           botUsername: bot?.username ?? null,
@@ -667,8 +665,6 @@ export default {
             Boolean(bot) && bot?.id === env.DISCORD_APPLICATION_ID?.trim(),
           bridgeConfigured:
             (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32,
-          checkerAuthConfigured:
-            (env.X_AUTH_TOKEN?.trim().length ?? 0) >= 20,
           discordError
         },
         bot ? 200 : 503
