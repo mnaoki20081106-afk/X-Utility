@@ -45,8 +45,9 @@ function shadowbanPanelPayload() {
     embeds: [
       {
         title: "X 垢状態チェック",
-        description:\n          "シャドウバン・凍結をチェックできます。
-" +\n          "Xの垢のIDを入力してください。",
+        description:
+          "シャドウバン・凍結をチェックできます。\n" +
+          "Xの垢のIDを入力してください。",
         color: 0x111111
       }
     ],
