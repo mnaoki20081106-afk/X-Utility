@@ -339,16 +339,6 @@ function hexToBytes(value: string): Uint8Array | null {
   return out;
 }
 
-function randomNonce(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(18));
-  let binary = "";
-  for (const value of bytes) binary += String.fromCharCode(value);
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
 function pruneNonces(now: number): void {
   for (const [nonce, expiresAt] of replayNonces) {
     if (expiresAt <= now) replayNonces.delete(nonce);
@@ -405,7 +395,7 @@ async function verifyBridgeRequest(
   const valid = await crypto.subtle.verify(
     "HMAC",
     key,
-    signatureBytes,
+    signatureBytes.buffer as ArrayBuffer,
     new TextEncoder().encode(canonical)
   );
   if (!valid) throw new Error("INVALID_SIGNATURE");
