@@ -125,7 +125,7 @@
       ],
       "notes": [
         "Privileged Gateway Intentsは不要です。",
-        "2FAシークレットは保存せず、その場でTOTPコードを生成して本人だけにEphemeral表示します。",
+        "2FAシークレットはDiscordやWorkerへ送信せず、パネルから開くページの端末内JavaScriptだけでTOTPを生成します。",
         "Interactions Endpoint URL: https://<Factoryで発行されたWorker URL>/interactions"
       ]
     }
