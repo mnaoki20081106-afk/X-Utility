@@ -1,0 +1,114 @@
+{
+  "name": "x-utility",
+  "runtime": "worker",
+  "provider": "cloudflare",
+  "working_directory": ".",
+  "wrangler_config": "wrangler.jsonc",
+  "d1_migrations": [],
+  "d1_schema_files": [],
+  "setup": {
+    "title": "X-Utility",
+    "description": "XのシャドウバンチェックとTOTP 2FAコード生成だけを提供するDiscord BOTです。Xaccount-Bot管理画面からパネルを設置する場合は、両BOTに同じ連携Secretを設定します。",
+    "fields": [
+      {
+        "key": "DISCORD_BOT_TOKEN",
+        "label": "BOT Token",
+        "type": "secret",
+        "required": true,
+        "source": {
+          "title": "BOT Tokenの取得方法",
+          "steps": [
+            "Discord Developer PortalでX-Utility用Applicationを開く",
+            "左メニューのBotを開く",
+            "Token欄でReset TokenまたはCopyを押して値をコピーする"
+          ],
+          "url": "https://discord.com/developers/applications",
+          "link_label": "Discord Developer Portalを開く ↗"
+        }
+      },
+      {
+        "key": "DISCORD_APPLICATION_ID",
+        "label": "Application ID",
+        "type": "text",
+        "required": true,
+        "pattern": "^\\d{17,20}$",
+        "source": {
+          "title": "Application IDの取得方法",
+          "steps": [
+            "Discord Developer PortalでX-Utility用Applicationを開く",
+            "General Informationを開く",
+            "Application IDをコピーする"
+          ],
+          "url": "https://discord.com/developers/applications",
+          "link_label": "Discord Developer Portalを開く ↗"
+        }
+      },
+      {
+        "key": "DISCORD_PUBLIC_KEY",
+        "label": "Public Key",
+        "type": "secret",
+        "required": true,
+        "source": {
+          "title": "Public Keyの取得方法",
+          "steps": [
+            "Discord Developer PortalでX-Utility用Applicationを開く",
+            "General Informationを開く",
+            "Public Keyをコピーする"
+          ],
+          "url": "https://discord.com/developers/applications",
+          "link_label": "Discord Developer Portalを開く ↗"
+        }
+      },
+      {
+        "key": "XUTILITY_BRIDGE_SECRET",
+        "label": "Xaccount-Bot連携 Secret",
+        "type": "secret",
+        "required": true,
+        "pattern": "^.{32,}$",
+        "placeholder": "Xaccount-Bot側と同じ32文字以上の値",
+        "help": "Xaccount-Bot管理画面からX-Utilityへパネル設置を依頼する署名に使います。Xaccount-Bot側にも同じ値を設定してください。"
+      }
+    ],
+    "discord": {
+      "intents": [],
+      "permissions": [
+        {
+          "id": "view-channels",
+          "label": "チャンネルを見る",
+          "required": true,
+          "description": "パネル設置先を確認するために必要です。",
+          "discord_permission": "VIEW_CHANNEL"
+        },
+        {
+          "id": "send-messages",
+          "label": "メッセージを送信",
+          "required": true,
+          "description": "シャドウバンチェック・2FAパネルを設置するために必要です。",
+          "discord_permission": "SEND_MESSAGES"
+        },
+        {
+          "id": "embed-links",
+          "label": "埋め込みリンク",
+          "required": true,
+          "description": "結果をEmbedで表示するために必要です。",
+          "discord_permission": "EMBED_LINKS"
+        }
+      ],
+      "checks": [
+        {
+          "id": "post-deploy-interactions-url",
+          "label": "初回デプロイ後: Interactions Endpoint URLを設定",
+          "required": false,
+          "description": "Factoryで発行されたWorker URLを使い、Discord Developer Portal > General Information > Interactions Endpoint URLへ「https://<Worker URL>/interactions」を設定します。",
+          "path": "Discord Developer Portal > General Information > Interactions Endpoint URL",
+          "url": "https://discord.com/developers/applications"
+        }
+      ],
+      "notes": [
+        "Privileged Gateway Intentsは不要です。",
+        "2FAシークレットは保存せず、その場でTOTPコードを生成して本人だけにEphemeral表示します。",
+        "Interactions Endpoint URL: https://<Factoryで発行されたWorker URL>/interactions"
+      ]
+    }
+  }
+}
