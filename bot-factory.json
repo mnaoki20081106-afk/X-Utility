@@ -47,7 +47,7 @@
         "key": "DISCORD_PUBLIC_KEY",
         "label": "Public Key",
         "type": "secret",
-        "required": true,
+        "required": false,
         "source": {
           "title": "Public Keyの取得方法",
           "steps": [
@@ -58,8 +58,8 @@
           "url": "https://discord.com/developers/applications",
           "link_label": "Discord Developer Portalを開く ↗"
         },
-        "pattern": "^[0-9a-fA-F]{64}$",
-        "placeholder": "64文字のPublic Key"
+        "placeholder": "通常は空欄でOK",
+        "help": "通常は入力不要です。X-UtilityがBOT TokenからDiscord Applicationの正しいverify_keyを自動取得します。手動で固定したい場合のみ入力してください。"
       },
       {
         "key": "XUTILITY_BRIDGE_SECRET",
@@ -96,20 +96,11 @@
           "discord_permission": "EMBED_LINKS"
         }
       ],
-      "checks": [
-        {
-          "id": "post-deploy-interactions-url",
-          "label": "初回デプロイ後: Interactions Endpoint URLを設定",
-          "required": true,
-          "description": "Factoryで発行されたWorker URLを使い、Discord Developer Portal > General Information > Interactions Endpoint URLへ「https://<Worker URL>/interactions」を設定してください。これが未設定・別URLだとボタンやモーダルが「アプリケーションが時間内に応答しませんでした」になります。",
-          "path": "Discord Developer Portal > General Information > Interactions Endpoint URL",
-          "url": "https://discord.com/developers/applications"
-        }
-      ],
+      "checks": [],
       "notes": [
         "Privileged Gateway Intentsは不要です。",
         "2FAキーはDiscordモーダルで受け取り、TOTPをEphemeral表示します。DB/KV/ログには保存せず、更新用の状態だけを暗号化してEphemeralメッセージ内に保持します。",
-        "Interactions Endpoint URL: https://<Factoryで発行されたWorker URL>/interactions"
+        "Interactions Endpoint URLは、Xaccount-Botから最初にパネルを設置する際にX-UtilityがDiscord APIへ自動設定・修復します。"
       ]
     }
   }
