@@ -36,6 +36,12 @@ export function decodeBase32(value: string): Uint8Array {
   return new Uint8Array(bytes);
 }
 
+function asArrayBuffer(value: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(value.byteLength);
+  copy.set(value);
+  return copy.buffer;
+}
+
 function counterBytes(counter: number): Uint8Array {
   const out = new Uint8Array(8);
   let value = BigInt(counter);
@@ -63,13 +69,13 @@ export async function generateTotp(
   const counter = Math.floor(epochSeconds / periodSeconds);
   const key = await crypto.subtle.importKey(
     "raw",
-    keyBytes,
+    asArrayBuffer(keyBytes),
     { name: "HMAC", hash: "SHA-1" },
     false,
     ["sign"]
   );
   const digest = new Uint8Array(
-    await crypto.subtle.sign("HMAC", key, counterBytes(counter))
+    await crypto.subtle.sign("HMAC", key, asArrayBuffer(counterBytes(counter)))
   );
   const offset = digest[digest.length - 1]! & 0x0f;
   const binary =
