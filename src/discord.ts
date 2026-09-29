@@ -1,10 +1,12 @@
 export type DiscordEnv = {
   DISCORD_BOT_TOKEN: string;
   DISCORD_APPLICATION_ID: string;
-  DISCORD_PUBLIC_KEY: string;
+  DISCORD_PUBLIC_KEY?: string;
 };
 
 const DISCORD_API = "https://discord.com/api/v10";
+let cachedVerifyKey = "";
+let cachedApplicationId = "";
 
 function hexToBytes(value: string): Uint8Array {
   const clean = value.trim();
@@ -25,18 +27,17 @@ function asBuffer(value: Uint8Array): ArrayBuffer {
   ) as ArrayBuffer;
 }
 
-export async function verifyInteraction(
-  env: DiscordEnv,
-  request: Request,
+async function verifyWithKey(
+  publicKeyHex: string,
+  signatureHex: string,
+  timestamp: string,
   body: string
 ): Promise<boolean> {
-  const signature = request.headers.get("X-Signature-Ed25519");
-  const timestamp = request.headers.get("X-Signature-Timestamp");
-  if (!signature || !timestamp) return false;
+  if (!/^[0-9a-f]{64}$/i.test(publicKeyHex.trim())) return false;
   try {
     const key = await crypto.subtle.importKey(
       "raw",
-      asBuffer(hexToBytes(env.DISCORD_PUBLIC_KEY)),
+      asBuffer(hexToBytes(publicKeyHex)),
       { name: "Ed25519" } as AlgorithmIdentifier,
       false,
       ["verify"]
@@ -45,7 +46,7 @@ export async function verifyInteraction(
     return await crypto.subtle.verify(
       { name: "Ed25519" } as AlgorithmIdentifier,
       key,
-      asBuffer(hexToBytes(signature)),
+      asBuffer(hexToBytes(signatureHex)),
       asBuffer(message)
     );
   } catch {
@@ -63,8 +64,7 @@ export async function discordFetch(
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(DISCORD_API + path, { ...init, headers });
-  return response;
+  return fetch(DISCORD_API + path, { ...init, headers });
 }
 
 export async function discordJson<T>(
@@ -80,6 +80,146 @@ export async function discordJson<T>(
     );
   }
   return response.json() as Promise<T>;
+}
+
+type CurrentApplication = {
+  id: string;
+  verify_key?: string;
+  interactions_endpoint_url?: string | null;
+};
+
+async function fetchCurrentApplication(
+  env: DiscordEnv
+): Promise<CurrentApplication> {
+  const application = await discordJson<CurrentApplication>(
+    env,
+    "/oauth2/applications/@me"
+  );
+  const verifyKey = String(application.verify_key ?? "").trim();
+  if (/^[0-9a-f]{64}$/i.test(verifyKey)) {
+    cachedVerifyKey = verifyKey;
+    cachedApplicationId = String(application.id ?? "").trim();
+  }
+  return application;
+}
+
+async function resolveVerifyKey(env: DiscordEnv): Promise<string> {
+  const applicationId = env.DISCORD_APPLICATION_ID?.trim() ?? "";
+  if (
+    cachedVerifyKey &&
+    cachedApplicationId &&
+    (!applicationId || cachedApplicationId === applicationId)
+  ) {
+    return cachedVerifyKey;
+  }
+
+  const application = await fetchCurrentApplication(env);
+  if (
+    applicationId &&
+    String(application.id ?? "").trim() !== applicationId
+  ) {
+    throw new Error("DISCORD_APPLICATION_ID_MISMATCH");
+  }
+
+  const verifyKey = String(application.verify_key ?? "").trim();
+  if (!/^[0-9a-f]{64}$/i.test(verifyKey)) {
+    throw new Error("DISCORD_VERIFY_KEY_UNAVAILABLE");
+  }
+  return verifyKey;
+}
+
+export async function verifyInteraction(
+  env: DiscordEnv,
+  request: Request,
+  body: string
+): Promise<boolean> {
+  const signature = request.headers.get("X-Signature-Ed25519")?.trim() ?? "";
+  const timestamp = request.headers.get("X-Signature-Timestamp")?.trim() ?? "";
+  if (!/^[0-9a-f]{128}$/i.test(signature) || !timestamp) return false;
+
+  const configured = env.DISCORD_PUBLIC_KEY?.trim() ?? "";
+  if (
+    /^[0-9a-f]{64}$/i.test(configured) &&
+    (await verifyWithKey(configured, signature, timestamp, body))
+  ) {
+    return true;
+  }
+
+  if (
+    cachedVerifyKey &&
+    cachedVerifyKey.toLowerCase() !== configured.toLowerCase() &&
+    (await verifyWithKey(cachedVerifyKey, signature, timestamp, body))
+  ) {
+    return true;
+  }
+
+  try {
+    const resolved = await resolveVerifyKey(env);
+    if (
+      resolved.toLowerCase() !== configured.toLowerCase() &&
+      (await verifyWithKey(resolved, signature, timestamp, body))
+    ) {
+      return true;
+    }
+  } catch {
+    // Invalid requests must still fail closed.
+  }
+
+  return false;
+}
+
+export async function ensureInteractionsEndpoint(
+  env: DiscordEnv,
+  workerOrigin: string
+): Promise<{
+  applicationId: string;
+  verifyKeyAvailable: boolean;
+  endpoint: string;
+  changed: boolean;
+}> {
+  const application = await fetchCurrentApplication(env);
+  const applicationId = String(application.id ?? "").trim();
+  const expectedApplicationId = env.DISCORD_APPLICATION_ID?.trim() ?? "";
+  if (expectedApplicationId && applicationId !== expectedApplicationId) {
+    throw new Error("DISCORD_APPLICATION_ID_MISMATCH");
+  }
+
+  const expectedEndpoint =
+    workerOrigin.replace(/\/+$/g, "") + "/interactions";
+  const currentEndpoint = String(
+    application.interactions_endpoint_url ?? ""
+  ).trim();
+
+  if (currentEndpoint === expectedEndpoint) {
+    return {
+      applicationId,
+      verifyKeyAvailable: /^[0-9a-f]{64}$/i.test(
+        String(application.verify_key ?? "")
+      ),
+      endpoint: expectedEndpoint,
+      changed: false
+    };
+  }
+
+  const updated = await discordJson<CurrentApplication>(
+    env,
+    "/applications/@me",
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        interactions_endpoint_url: expectedEndpoint
+      })
+    }
+  );
+
+  return {
+    applicationId: String(updated.id ?? applicationId),
+    verifyKeyAvailable: /^[0-9a-f]{64}$/i.test(
+      String(updated.verify_key ?? application.verify_key ?? "")
+    ),
+    endpoint: expectedEndpoint,
+    changed: true
+  };
 }
 
 export async function editOriginalInteraction(
