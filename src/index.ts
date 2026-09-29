@@ -154,7 +154,7 @@ function totpModal() {
               min_length: 8,
               max_length: 36,
               required: true,
-              placeholder: "Base32シークレットを入力"
+              placeholder: "例: ABCD EFGH IJKL MNOP（16桁）"
             }
           ]
         }
