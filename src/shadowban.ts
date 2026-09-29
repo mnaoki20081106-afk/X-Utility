@@ -220,33 +220,16 @@ async function graphqlRequest(
     "/" +
     encodeURIComponent(operationName);
   const headers = await xHeaders();
-  let response: Response;
-
-  if (operationName === "SearchTimeline") {
-    response = await fetchTimeout(base, {
-      method: "POST",
-      headers: {
-        ...headers,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        variables,
-        features: FEATURES,
-        queryId
-      })
-    });
-  } else {
-    const url = new URL(base);
-    url.searchParams.set("variables", JSON.stringify(variables));
-    url.searchParams.set("features", JSON.stringify(FEATURES));
-    if (operationName === "UserByScreenName") {
-      url.searchParams.set(
-        "fieldToggles",
-        JSON.stringify({ withAuxiliaryUserLabels: false })
-      );
-    }
-    response = await fetchTimeout(url, { headers });
+  const url = new URL(base);
+  url.searchParams.set("variables", JSON.stringify(variables));
+  url.searchParams.set("features", JSON.stringify(FEATURES));
+  if (operationName === "UserByScreenName") {
+    url.searchParams.set(
+      "fieldToggles",
+      JSON.stringify({ withAuxiliaryUserLabels: false })
+    );
   }
+  const response = await fetchTimeout(url, { headers });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
