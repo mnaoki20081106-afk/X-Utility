@@ -286,10 +286,19 @@ async function handleInteraction(
         });
       }
 
-      const [userLimit, globalLimit] = await Promise.all([
-        env.SHADOWBAN_USER_LIMITER.limit({ key: actorId }),
-        env.SHADOWBAN_GLOBAL_LIMITER.limit({ key: "shadowban-check" })
-      ]);
+      if (!/^@?[A-Za-z0-9_]{1,15}$/.test(username)) {
+        return discordInteractionResponse({
+          type: 4,
+          data: {
+            flags: 64,
+            content: "有効なXユーザー名を入力してください"
+          }
+        });
+      }
+
+      const userLimit = await env.SHADOWBAN_USER_LIMITER.limit({
+        key: actorId
+      });
       if (!userLimit.success) {
         return discordInteractionResponse({
           type: 4,
@@ -300,6 +309,10 @@ async function handleInteraction(
           }
         });
       }
+
+      const globalLimit = await env.SHADOWBAN_GLOBAL_LIMITER.limit({
+        key: "shadowban-check"
+      });
       if (!globalLimit.success) {
         return discordInteractionResponse({
           type: 4,
