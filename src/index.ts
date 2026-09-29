@@ -8,9 +8,15 @@ import {
 import { checkShadowban, type ShadowbanItem } from "./shadowban";
 import { generateTotp } from "./totp";
 
+type RateLimiterBinding = {
+  limit(input: { key: string }): Promise<{ success: boolean }>;
+};
+
 type Env = DiscordEnv & {
   XUTILITY_BRIDGE_SECRET: string;
   X_AUTH_TOKEN: string;
+  SHADOWBAN_USER_LIMITER: RateLimiterBinding;
+  SHADOWBAN_GLOBAL_LIMITER: RateLimiterBinding;
 };
 
 const SHADOWBAN_BUTTON_ID = "xutil:shadowban:open";
@@ -299,6 +305,45 @@ async function handleInteraction(
           }
         });
       }
+
+      const actorId = String(
+        interaction?.member?.user?.id ?? interaction?.user?.id ?? ""
+      );
+      if (!actorId) {
+        return discordInteractionResponse({
+          type: 4,
+          data: {
+            flags: 64,
+            content: "操作ユーザーを確認できませんでした"
+          }
+        });
+      }
+
+      const [userLimit, globalLimit] = await Promise.all([
+        env.SHADOWBAN_USER_LIMITER.limit({ key: actorId }),
+        env.SHADOWBAN_GLOBAL_LIMITER.limit({ key: "shadowban-check" })
+      ]);
+      if (!userLimit.success) {
+        return discordInteractionResponse({
+          type: 4,
+          data: {
+            flags: 64,
+            content:
+              "チェック回数が多すぎます。1分あたり2回まで利用できます。"
+          }
+        });
+      }
+      if (!globalLimit.success) {
+        return discordInteractionResponse({
+          type: 4,
+          data: {
+            flags: 64,
+            content:
+              "現在チェックが集中しています。少し時間を空けてから再実行してください。"
+          }
+        });
+      }
+
       ctx.waitUntil(finishShadowban(interaction, username, env));
       return discordInteractionResponse({
         type: 5,
