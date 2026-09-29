@@ -22,10 +22,6 @@ export type ShadowbanResult = {
   };
 };
 
-type CheckOptions = {
-  authToken: string;
-};
-
 const PUBLIC_BEARER =
   "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
 
@@ -47,8 +43,6 @@ const FEATURES: Record<string, boolean> = {
   articles_preview_enabled: true,
   c9s_tweet_anatomy_moderator_badge_enabled: true,
   communities_web_enable_tweet_community_results_fetch: true,
-  content_disclosure_ai_generated_indicator_enabled: true,
-  content_disclosure_indicator_enabled: true,
   creator_subscriptions_tweet_preview_api_enabled: true,
   freedom_of_speech_not_reach_fetch_enabled: true,
   graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
@@ -57,67 +51,25 @@ const FEATURES: Record<string, boolean> = {
   longform_notetweets_consumption_enabled: true,
   longform_notetweets_inline_media_enabled: false,
   longform_notetweets_rich_text_read_enabled: true,
-  post_ctas_fetch_enabled: false,
-  premium_content_api_read_enabled: false,
   profile_label_improvements_pcf_label_in_post_enabled: true,
-  responsive_web_birdwatch_enforce_author_user_quotas: true,
-  responsive_web_birdwatch_fast_notes_badge_enabled: false,
-  responsive_web_birdwatch_live_note_enabled: true,
-  responsive_web_birdwatch_media_notes_enabled: true,
-  responsive_web_birdwatch_note_internal_insights_enabled: false,
-  responsive_web_birdwatch_note_limit_enabled: true,
-  responsive_web_birdwatch_note_request_download_enabled: true,
-  responsive_web_birdwatch_note_request_sources_enabled: true,
-  responsive_web_birdwatch_signup_prompt_enabled: true,
-  responsive_web_birdwatch_top_contributor_enabled: true,
-  responsive_web_birdwatch_translation_enabled: true,
-  responsive_web_birdwatch_url_notes_enabled: false,
   responsive_web_edit_tweet_api_enabled: true,
   responsive_web_enhance_cards_enabled: false,
   responsive_web_graphql_exclude_directive_enabled: true,
   responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
   responsive_web_graphql_timeline_navigation_enabled: true,
-  responsive_web_grok_analysis_button_from_backend: true,
-  responsive_web_grok_analyze_button_fetch_trends_enabled: false,
-  responsive_web_grok_analyze_post_followups_enabled: false,
-  responsive_web_grok_annotations_enabled: true,
-  responsive_web_grok_community_note_auto_translation_is_enabled: true,
-  responsive_web_grok_community_note_translation_is_enabled: true,
-  responsive_web_grok_image_annotation_enabled: true,
-  responsive_web_grok_imagine_annotation_enabled: true,
-  responsive_web_grok_share_attachment_enabled: true,
-  responsive_web_grok_show_grok_translated_post: true,
-  responsive_web_jetfuel_frame: true,
   responsive_web_profile_redirect_enabled: true,
   responsive_web_twitter_article_notes_tab_enabled: true,
   responsive_web_twitter_article_tweet_consumption_enabled: true,
-  rweb_cashtags_composer_attachment_enabled: true,
-  rweb_cashtags_enabled: true,
-  rweb_tipjar_consumption_enabled: false,
   rweb_video_screen_enabled: false,
-  spaces_2022_h2_clipping: true,
-  spaces_2022_h2_spaces_communities: true,
   standardized_nudges_misinfo: true,
-  subscriptions_feature_can_gift_premium: true,
-  subscriptions_management_fetch_next_billing_time: true,
-  subscriptions_marketing_page_fetch_promotions: true,
-  subscriptions_upsells_api_enabled: false,
-  subscriptions_verification_info_is_identity_verified_enabled: true,
-  subscriptions_verification_info_verified_since_enabled: true,
-  tweet_awards_web_tipping_enabled: false,
   tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
   verified_phone_label_enabled: false,
   view_counts_everywhere_api_enabled: true
 };
 
+let guestToken: { value: string; expiresAt: number } | null = null;
 let queryIdsRefreshedAt = 0;
 let queryRefreshPromise: Promise<void> | null = null;
-const sessionCsrfToken = randomHex(16);
-
-function randomHex(bytes: number): string {
-  const data = crypto.getRandomValues(new Uint8Array(bytes));
-  return [...data].map((value) => value.toString(16).padStart(2, "0")).join("");
-}
 
 function cleanUsername(value: string): string {
   const username = value.trim().replace(/^@+/, "");
@@ -127,18 +79,10 @@ function cleanUsername(value: string): string {
   return username;
 }
 
-function cleanAuthToken(value: string): string {
-  const token = value.trim();
-  if (token.length < 20 || /[\s;]/.test(token)) {
-    throw new Error("Xチェック用auth_tokenが未設定または不正です");
-  }
-  return token;
-}
-
 async function fetchTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
-  timeoutMs = 3_500
+  timeoutMs = 3500
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -149,18 +93,48 @@ async function fetchTimeout(
   }
 }
 
-function xHeaders(authToken: string): Record<string, string> {
+async function getGuestToken(): Promise<string> {
+  if (guestToken && guestToken.expiresAt > Date.now() + 60_000) {
+    return guestToken.value;
+  }
+
+  const response = await fetchTimeout(
+    "https://api.x.com/1.1/guest/activate.json",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + decodeURIComponent(PUBLIC_BEARER),
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": USER_AGENT
+      }
+    }
+  );
+  if (!response.ok) {
+    throw new Error("Xの公開セッションを開始できませんでした");
+  }
+
+  const payload = (await response.json()) as { guest_token?: string };
+  if (!payload.guest_token) {
+    throw new Error("Xの公開セッション取得結果が不正です");
+  }
+
+  guestToken = {
+    value: String(payload.guest_token),
+    expiresAt: Date.now() + 2.5 * 60 * 60_000
+  };
+  return guestToken.value;
+}
+
+async function xHeaders(): Promise<Record<string, string>> {
   return {
     Authorization: "Bearer " + decodeURIComponent(PUBLIC_BEARER),
-    "X-CSRF-Token": sessionCsrfToken,
+    "X-Guest-Token": await getGuestToken(),
     "X-Twitter-Active-User": "yes",
-    "X-Twitter-Auth-Type": "OAuth2Session",
     "X-Twitter-Client-Language": "ja",
     "User-Agent": USER_AGENT,
     Accept: "*/*",
     Origin: "https://x.com",
-    Referer: "https://x.com/",
-    Cookie: "auth_token=" + authToken + "; ct0=" + sessionCsrfToken
+    Referer: "https://x.com/"
   };
 }
 
@@ -187,7 +161,7 @@ async function discoverCurrentQueryIds(): Promise<void> {
           },
           redirect: "follow"
         },
-        3_000
+        3000
       );
       if (!response.ok) throw new Error("entry HTTP " + response.status);
       const html = await response.text();
@@ -208,10 +182,8 @@ async function discoverCurrentQueryIds(): Promise<void> {
     try {
       const response = await fetchTimeout(
         mainUrl,
-        {
-          headers: { "User-Agent": USER_AGENT, Accept: "*/*" }
-        },
-        4_500
+        { headers: { "User-Agent": USER_AGENT, Accept: "*/*" } },
+        4500
       );
       if (!response.ok) return;
       const source = await response.text();
@@ -239,7 +211,6 @@ async function discoverCurrentQueryIds(): Promise<void> {
 async function graphqlRequest(
   operationName: keyof typeof OPERATION_IDS,
   variables: Record<string, unknown>,
-  authToken: string,
   retried = false
 ): Promise<any> {
   const queryId = OPERATION_IDS[operationName];
@@ -248,7 +219,7 @@ async function graphqlRequest(
     encodeURIComponent(queryId) +
     "/" +
     encodeURIComponent(operationName);
-  const headers = xHeaders(authToken);
+  const headers = await xHeaders();
   let response: Response;
 
   if (operationName === "SearchTimeline") {
@@ -279,11 +250,6 @@ async function graphqlRequest(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        "Xチェック用auth_tokenが無効・期限切れ、またはX側に拒否されました"
-      );
-    }
     if (response.status === 429) {
       throw new Error("X側のレート制限中です");
     }
@@ -295,11 +261,11 @@ async function graphqlRequest(
     if (!retried && staleId) {
       queryIdsRefreshedAt = 0;
       await discoverCurrentQueryIds();
-      return graphqlRequest(operationName, variables, authToken, true);
+      return graphqlRequest(operationName, variables, true);
     }
 
     throw new Error(
-      "X API " + response.status + ": " + detail.slice(0, 160)
+      "X公開エンドポイント " + response.status + ": " + detail.slice(0, 120)
     );
   }
 
@@ -309,16 +275,10 @@ async function graphqlRequest(
       ? JSON.stringify((payload as any).errors ?? "")
       : "";
 
-  if (/auth|unauthorized|forbidden|login/i.test(errorText)) {
-    throw new Error(
-      "Xチェック用auth_tokenが無効・期限切れ、またはX側に拒否されました"
-    );
-  }
-
   if (!retried && /query|persisted|operation/i.test(errorText)) {
     queryIdsRefreshedAt = 0;
     await discoverCurrentQueryIds();
-    return graphqlRequest(operationName, variables, authToken, true);
+    return graphqlRequest(operationName, variables, true);
   }
 
   return payload;
@@ -328,7 +288,6 @@ type SearchTweet = {
   id: string;
   username: string | null;
   parentId: string | null;
-  conversationId: string | null;
   hasMedia: boolean;
   possiblySensitive: boolean | null;
 };
@@ -372,9 +331,6 @@ function tweetFromResult(result: any): SearchTweet | null {
     username: username ? String(username) : null,
     parentId: legacy.in_reply_to_status_id_str
       ? String(legacy.in_reply_to_status_id_str)
-      : null,
-    conversationId: legacy.conversation_id_str
-      ? String(legacy.conversation_id_str)
       : null,
     hasMedia: Array.isArray(media) && media.length > 0,
     possiblySensitive:
@@ -424,42 +380,30 @@ function sameUser(tweet: SearchTweet, username: string): boolean {
 async function searchTweets(
   rawQuery: string,
   product: "Latest" | "Top" | "People",
-  username: string,
-  authToken: string
+  username: string
 ): Promise<SearchTweet[]> {
-  const payload = await graphqlRequest(
-    "SearchTimeline",
-    {
-      rawQuery,
-      count: 20,
-      querySource: "typed_query",
-      product
-    },
-    authToken
-  );
+  const payload = await graphqlRequest("SearchTimeline", {
+    rawQuery,
+    count: 20,
+    querySource: "typed_query",
+    product
+  });
   return collectTweetResults(payload).filter((tweet) =>
     sameUser(tweet, username)
   );
 }
 
-async function profileByUsername(
-  username: string,
-  authToken: string
-): Promise<{
+async function profileByUsername(username: string): Promise<{
   userId: string | null;
   displayName: string;
   protected: boolean;
   suspended: boolean;
   tweetCount: number | null;
 }> {
-  const payload = await graphqlRequest(
-    "UserByScreenName",
-    {
-      screen_name: username,
-      withSafetyModeUserFields: true
-    },
-    authToken
-  );
+  const payload = await graphqlRequest("UserByScreenName", {
+    screen_name: username,
+    withSafetyModeUserFields: true
+  });
   const user = payload?.data?.user?.result;
   if (!user) throw new Error("Xアカウントが見つかりません");
 
@@ -495,21 +439,16 @@ async function profileByUsername(
 
 async function userTweets(
   userId: string,
-  username: string,
-  authToken: string
+  username: string
 ): Promise<SearchTweet[]> {
-  const payload = await graphqlRequest(
-    "UserTweets",
-    {
-      userId,
-      count: 20,
-      includePromotedContent: true,
-      withQuickPromoteEligibilityTweetFields: true,
-      withVoice: true,
-      withV2Timeline: true
-    },
-    authToken
-  );
+  const payload = await graphqlRequest("UserTweets", {
+    userId,
+    count: 20,
+    includePromotedContent: true,
+    withQuickPromoteEligibilityTweetFields: true,
+    withVoice: true,
+    withV2Timeline: true
+  });
   return collectTweetResults(payload).filter((tweet) =>
     sameUser(tweet, username)
   );
@@ -517,12 +456,11 @@ async function userTweets(
 
 async function searchSuggestionVisible(
   username: string,
-  displayName: string,
-  authToken: string
+  displayName: string
 ): Promise<boolean> {
   const endpoints = [
-    "https://api.x.com/1.1/search/typeahead.json",
-    "https://x.com/i/api/1.1/search/typeahead.json"
+    "https://x.com/i/api/1.1/search/typeahead.json",
+    "https://api.x.com/1.1/search/typeahead.json"
   ];
   let lastError: unknown = null;
 
@@ -540,14 +478,8 @@ async function searchSuggestionVisible(
       url.searchParams.set("include_ext_profile_image_shape", "1");
 
       const response = await fetchTimeout(url, {
-        headers: xHeaders(authToken)
+        headers: await xHeaders()
       });
-
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(
-          "Xチェック用auth_tokenが無効・期限切れ、またはX側に拒否されました"
-        );
-      }
       if (!response.ok) {
         lastError = new Error("typeahead HTTP " + response.status);
         continue;
@@ -613,7 +545,6 @@ function collectShowMoreCursors(root: any): string[] {
 
 async function tweetDetail(
   focalTweetId: string,
-  authToken: string,
   cursor?: string
 ): Promise<any> {
   const variables: Record<string, unknown> = {
@@ -628,7 +559,7 @@ async function tweetDetail(
     withV2Timeline: true
   };
   if (cursor) variables.cursor = cursor;
-  return graphqlRequest("TweetDetail", variables, authToken);
+  return graphqlRequest("TweetDetail", variables);
 }
 
 function clear(detail: string): ShadowbanItem {
@@ -648,12 +579,10 @@ function na(detail: string): ShadowbanItem {
 }
 
 export async function checkShadowban(
-  input: string,
-  options: CheckOptions
+  input: string
 ): Promise<ShadowbanResult> {
   const username = cleanUsername(input);
-  const authToken = cleanAuthToken(options.authToken);
-  const profile = await profileByUsername(username, authToken);
+  const profile = await profileByUsername(username);
 
   const checks: ShadowbanResult["checks"] = {
     mediaBan: unknown("まだ判定していません"),
@@ -707,19 +636,10 @@ export async function checkShadowban(
   const [profileTweetsResult, latestResult, suggestionResult] =
     await Promise.allSettled([
       profile.userId
-        ? userTweets(profile.userId, username, authToken)
+        ? userTweets(profile.userId, username)
         : Promise.resolve([] as SearchTweet[]),
-      searchTweets(
-        "from:" + username,
-        "Latest",
-        username,
-        authToken
-      ),
-      searchSuggestionVisible(
-        username,
-        profile.displayName,
-        authToken
-      )
+      searchTweets("from:" + username, "Latest", username),
+      searchSuggestionVisible(username, profile.displayName)
     ]);
 
   const profileTweets =
@@ -733,7 +653,7 @@ export async function checkShadowban(
 
   if (latestResult.status === "rejected") {
     checks.searchBan = unknown(
-      "検索結果を取得できません: " +
+      "Xの公開検索から判定できません: " +
         (latestResult.reason instanceof Error
           ? latestResult.reason.message
           : String(latestResult.reason))
@@ -772,8 +692,7 @@ export async function checkShadowban(
           const safe = await searchTweets(
             "from:" + username + " filter:safe",
             "Latest",
-            username,
-            authToken
+            username
           );
           checks.searchSensitiveBan =
             safe.length > 0
@@ -802,7 +721,7 @@ export async function checkShadowban(
                   "最近の公開ポストにセンシティブ判定は確認されませんでした"
                 )
               : unknown(
-                  "セーフ検索との比較ができず、センシティブ判定情報も取得できません"
+                  "公開検索では比較できず、センシティブ判定情報も取得できません"
                 );
       } catch (error) {
         checks.searchSensitiveBan = unknown(
@@ -834,8 +753,7 @@ export async function checkShadowban(
         const searchedMedia = await searchTweets(
           "from:" + username + " filter:media",
           "Latest",
-          username,
-          authToken
+          username
         );
         const searchedIds = new Set(
           searchedMedia.map((tweet) => tweet.id)
@@ -864,36 +782,23 @@ export async function checkShadowban(
         const replyCandidates = await searchTweets(
           "from:" + username + " filter:replies",
           "Latest",
-          username,
-          authToken
+          username
         );
         const target = replyCandidates.find((tweet) =>
           Boolean(tweet.parentId)
         );
 
         if (!target?.parentId) {
-          if (checks.searchBan.state === "banned") {
-            checks.ghostBan = unknown(
-              "Search Banが検出されているため、返信候補を検索から取得できません"
-            );
-            checks.replyDeboosting = unknown(
-              "Search Banが検出されているため、返信表示順位を判定できません"
-            );
-          } else {
-            checks.ghostBan = na(
-              "判定に使える最近の返信がありません"
-            );
-            checks.replyDeboosting = na(
-              "判定に使える最近の返信がありません"
-            );
-          }
+          checks.ghostBan = na(
+            "判定に使える最近の返信がありません"
+          );
+          checks.replyDeboosting = na(
+            "判定に使える最近の返信がありません"
+          );
           return;
         }
 
-        const first = await tweetDetail(
-          target.parentId,
-          authToken
-        );
+        const first = await tweetDetail(target.parentId);
         const initialIds = new Set(
           collectTweetResults(first).map((tweet) => tweet.id)
         );
@@ -919,11 +824,7 @@ export async function checkShadowban(
           return;
         }
 
-        const page = await tweetDetail(
-          target.parentId,
-          authToken,
-          cursor
-        );
+        const page = await tweetDetail(target.parentId, cursor);
         const ids = new Set(
           collectTweetResults(page).map((tweet) => tweet.id)
         );
