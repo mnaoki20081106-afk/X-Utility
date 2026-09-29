@@ -6,7 +6,6 @@ import {
   type DiscordEnv
 } from "./discord";
 import { checkShadowban, type ShadowbanItem } from "./shadowban";
-import { generateTotp } from "./totp";
 
 type RateLimiterBinding = {
   limit(input: { key: string }): Promise<{ success: boolean }>;
@@ -22,9 +21,6 @@ type Env = DiscordEnv & {
 const SHADOWBAN_BUTTON_ID = "xutil:shadowban:open";
 const SHADOWBAN_MODAL_ID = "xutil:shadowban:submit";
 const SHADOWBAN_USERNAME_ID = "username";
-const TOTP_BUTTON_ID = "xutil:2fa:open";
-const TOTP_MODAL_ID = "xutil:2fa:submit";
-const TOTP_SECRET_ID = "secret";
 const MAX_CLOCK_SKEW_MS = 5 * 60_000;
 const replayNonces = new Map<string, number>();
 
@@ -74,14 +70,14 @@ function shadowbanPanelPayload() {
   };
 }
 
-function totpPanelPayload() {
+function totpPanelPayload(origin: string) {
   return {
     embeds: [
       {
         title: "X 2FAコード生成",
         description:
-          "Xの認証アプリ用Base32シークレットから、現在の6桁TOTPコードを生成します。\n" +
-          "入力したシークレットは保存しません。結果は本人にだけ表示されます。",
+          "認証アプリ用Base32シークレットから6桁TOTPを生成します。\n" +
+          "シークレットはDiscordやX-Utilityへ送信せず、開いた端末内だけで計算します。",
         color: 0x111111
       }
     ],
@@ -91,9 +87,9 @@ function totpPanelPayload() {
         components: [
           {
             type: 2,
-            style: 1,
+            style: 5,
             label: "2FAコードを生成",
-            custom_id: TOTP_BUTTON_ID
+            url: origin + "/totp"
           }
         ]
       }
@@ -144,32 +140,6 @@ function shadowbanModal() {
   };
 }
 
-function totpModal() {
-  return {
-    type: 9,
-    data: {
-      custom_id: TOTP_MODAL_ID,
-      title: "X 2FAコード生成",
-      components: [
-        {
-          type: 1,
-          components: [
-            {
-              type: 4,
-              custom_id: TOTP_SECRET_ID,
-              label: "2FAシークレット（Base32）",
-              style: 1,
-              min_length: 8,
-              max_length: 256,
-              required: true,
-              placeholder: "例: JBSWY3DPEHPK3PXP"
-            }
-          ]
-        }
-      ]
-    }
-  };
-}
 
 function stateLabel(item: ShadowbanItem): string {
   if (item.state === "clear") return "✅ 検出なし";
@@ -286,9 +256,6 @@ async function handleInteraction(
     if (customId === SHADOWBAN_BUTTON_ID) {
       return discordInteractionResponse(shadowbanModal());
     }
-    if (customId === TOTP_BUTTON_ID) {
-      return discordInteractionResponse(totpModal());
-    }
   }
 
   if (interaction.type === 5) {
@@ -351,47 +318,7 @@ async function handleInteraction(
       });
     }
 
-    if (customId === TOTP_MODAL_ID) {
-      const secret = modalValue(interaction, TOTP_SECRET_ID);
-      try {
-        const result = await generateTotp(secret);
-        return discordInteractionResponse({
-          type: 4,
-          data: {
-            flags: 64,
-            embeds: [
-              {
-                title: "X 2FAコード",
-                description: "**`" + result.code + "`**",
-                color: 0x2ecc71,
-                fields: [
-                  {
-                    name: "有効時間",
-                    value:
-                      "あと約 " +
-                      result.remainingSeconds +
-                      " 秒（30秒ごとに更新）"
-                  }
-                ],
-                footer: {
-                  text: "入力したシークレットはX-Utilityに保存されません"
-                }
-              }
-            ]
-          }
-        });
-      } catch (error) {
-        return discordInteractionResponse({
-          type: 4,
-          data: {
-            flags: 64,
-            content:
-              "2FAコードを生成できませんでした: " +
-              (error instanceof Error ? error.message : String(error))
-          }
-        });
-      }
-    }
+
   }
 
   return discordInteractionResponse({
@@ -547,7 +474,9 @@ async function handleBridge(
       {
         method: "POST",
         body: JSON.stringify(
-          kind === "shadowban" ? shadowbanPanelPayload() : totpPanelPayload()
+          kind === "shadowban"
+            ? shadowbanPanelPayload()
+            : totpPanelPayload(url.origin)
         )
       }
     );
@@ -563,6 +492,134 @@ async function handleBridge(
   }
 }
 
+function totpPage(): Response {
+  const html = `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>X-Utility 2FA</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d10;color:#f5f7fa;padding:20px}
+main{width:min(520px,100%);background:#14181d;border:1px solid #2a3038;border-radius:18px;padding:24px;box-shadow:0 18px 60px #0008}
+h1{font-size:22px;margin:0 0 8px}p{color:#aeb7c2;line-height:1.6}label{display:block;font-weight:700;margin:20px 0 8px}
+input{width:100%;padding:14px;border:1px solid #39424d;border-radius:12px;background:#0e1115;color:#fff;font:inherit}
+button{margin-top:12px;width:100%;padding:13px;border:0;border-radius:12px;background:#f4f6f8;color:#0b0d10;font-weight:800;font:inherit;cursor:pointer}
+.code{font:700 42px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;text-align:center;margin:24px 0 6px}
+.small{text-align:center;color:#98a3af;font-size:13px}.ok{color:#77d99a}.err{color:#ff8d8d}
+</style>
+</head>
+<body>
+<main>
+<h1>X 2FAコード生成</h1>
+<p>入力したシークレットはこの端末内のJavaScriptだけで処理され、X-UtilityやDiscordへ送信されません。ページを閉じると消えます。</p>
+<label for="secret">Base32シークレット</label>
+<input id="secret" type="password" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="JBSWY3DPEHPK3PXP">
+<button id="generate" type="button">コードを生成</button>
+<div id="code" class="code">------</div>
+<div id="status" class="small">シークレットを入力してください</div>
+</main>
+<script>
+(() => {
+  "use strict";
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const input = document.getElementById("secret");
+  const codeEl = document.getElementById("code");
+  const statusEl = document.getElementById("status");
+  let activeSecret = "";
+
+  function decodeBase32(raw) {
+    const value = raw.trim().toUpperCase().replace(/[\\s-]+/g, "").replace(/=+$/g, "");
+    if (!value || !/^[A-Z2-7]+$/.test(value)) throw new Error("Base32形式で入力してください");
+    let buffer = 0, bits = 0;
+    const bytes = [];
+    for (const ch of value) {
+      buffer = (buffer << 5) | alphabet.indexOf(ch);
+      bits += 5;
+      while (bits >= 8) {
+        bits -= 8;
+        bytes.push((buffer >>> bits) & 255);
+        buffer &= (1 << bits) - 1;
+      }
+    }
+    if (!bytes.length) throw new Error("シークレットが短すぎます");
+    return new Uint8Array(bytes);
+  }
+
+  function counterBytes(counter) {
+    const out = new Uint8Array(8);
+    let value = BigInt(counter);
+    for (let i = 7; i >= 0; i--) {
+      out[i] = Number(value & 255n);
+      value >>= 8n;
+    }
+    return out;
+  }
+
+  async function totp(secret) {
+    const epoch = Math.floor(Date.now() / 1000);
+    const counter = Math.floor(epoch / 30);
+    const key = await crypto.subtle.importKey(
+      "raw", decodeBase32(secret), {name:"HMAC",hash:"SHA-1"}, false, ["sign"]
+    );
+    const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, counterBytes(counter)));
+    const offset = digest[digest.length - 1] & 15;
+    const binary =
+      ((digest[offset] & 127) << 24) |
+      ((digest[offset + 1] & 255) << 16) |
+      ((digest[offset + 2] & 255) << 8) |
+      (digest[offset + 3] & 255);
+    return {
+      code: String(binary % 1000000).padStart(6, "0"),
+      remaining: 30 - (epoch % 30)
+    };
+  }
+
+  async function render() {
+    if (!activeSecret) return;
+    try {
+      const result = await totp(activeSecret);
+      codeEl.textContent = result.code;
+      statusEl.textContent = "あと " + result.remaining + " 秒";
+      statusEl.className = "small ok";
+    } catch (error) {
+      codeEl.textContent = "------";
+      statusEl.textContent = error instanceof Error ? error.message : String(error);
+      statusEl.className = "small err";
+      activeSecret = "";
+    }
+  }
+
+  document.getElementById("generate").addEventListener("click", () => {
+    activeSecret = input.value;
+    render();
+  });
+  setInterval(render, 1000);
+  window.addEventListener("pagehide", () => {
+    activeSecret = "";
+    input.value = "";
+    codeEl.textContent = "------";
+  });
+})();
+</script>
+</body>
+</html>`;
+
+  return new Response(html, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Content-Security-Policy":
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY"
+    }
+  });
+}
+
 export default {
   async fetch(
     request: Request,
@@ -570,6 +627,10 @@ export default {
     ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === "/totp" && request.method === "GET") {
+      return totpPage();
+    }
 
     if (url.pathname === "/" || url.pathname === "/health") {
       let bot: { id: string; username: string } | null = null;
