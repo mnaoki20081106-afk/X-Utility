@@ -404,19 +404,6 @@ export async function checkShadowban(
     };
   }
 
-  if (!legacy.statuses_count) {
-    return {
-      username,
-      displayName,
-      notFound: false,
-      protected: false,
-      suspended: false,
-      tweetCount,
-      checkedAt,
-      checks: baseChecks("ポストがないため判定対象外です", "na")
-    };
-  }
-
   const [searchBan, searchSuggestionBan] = await Promise.all([
     checkSearchBan(username),
     checkSearchSuggestion(username, displayName)
