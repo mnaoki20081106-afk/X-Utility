@@ -343,13 +343,30 @@ async function finishShadowban(
 
     const result = await withTimeout(
       checkShadowban(username),
-      14_000
+      20_000
     );
     const checks = result.checks;
     const title =
       result.displayName && result.displayName !== result.username
         ? result.displayName + " (@" + result.username + ")"
         : "@" + result.username;
+
+    if (result.notFound) {
+      await editOriginalInteraction(interaction, {
+        content: "",
+        embeds: [
+          {
+            title: "X 垢状態チェック — @" + result.username,
+            description: "⚠️ **ユーザーが見つかりませんでした。**",
+            color: 0xf39c12,
+            footer: { text: "X-Utility" },
+            timestamp: result.checkedAt
+          }
+        ],
+        components: []
+      });
+      return;
+    }
 
     if (result.suspended) {
       await editOriginalInteraction(interaction, {
@@ -387,12 +404,19 @@ async function finishShadowban(
               value: "✅ 凍結なし",
               inline: false
             },
-            checkField("Media Ban", checks.mediaBan),
-            checkField("Search Sensitive Ban", checks.searchSensitiveBan),
             checkField("Search Suggestion Ban", checks.searchSuggestionBan),
+            checkField("Media Ban", checks.mediaBan),
             checkField("Search Ban", checks.searchBan),
-            checkField("Ghost Ban", checks.ghostBan),
-            checkField("Reply Deboosting", checks.replyDeboosting)
+            {
+              name: "Ghost Ban (メンテナンス)",
+              value: "🔧 本家と同様に現在メンテナンス中です",
+              inline: false
+            },
+            {
+              name: "Reply Deboosting (メンテナンス)",
+              value: "🔧 本家と同様に現在メンテナンス中です",
+              inline: false
+            }
           ],
           footer: { text: "X-Utility" },
           timestamp: result.checkedAt
