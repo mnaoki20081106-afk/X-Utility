@@ -288,12 +288,15 @@ async function checkSearchBan(username: string): Promise<ShadowbanItem> {
   } catch (error) {
     if (error instanceof XApiError && error.status === 404) {
       return unknown(
-        "現在のXでは未ログインセッションからSearchTimelineを利用できません"
+        "現在、この項目を確認できません。時間を空けてもう一度お試しください。"
       );
     }
+    console.error(
+      "X search-ban check failed:",
+      error instanceof Error ? error.message : String(error)
+    );
     return unknown(
-      "Top検索を取得できません: " +
-        (error instanceof Error ? error.message : String(error))
+      "現在、この項目を確認できません。時間を空けてもう一度お試しください。"
     );
   }
 }
@@ -327,9 +330,12 @@ async function checkSearchSuggestion(
       ? clear("検索候補に本人のアカウントを確認できました")
       : banned("検索候補に本人のアカウントが見つかりませんでした");
   } catch (error) {
+    console.error(
+      "X search-suggestion check failed:",
+      error instanceof Error ? error.message : String(error)
+    );
     return unknown(
-      "検索候補を取得できません: " +
-        (error instanceof Error ? error.message : String(error))
+      "現在、この項目を確認できません。時間を空けてもう一度お試しください。"
     );
   }
 }
@@ -418,10 +424,8 @@ export async function checkShadowban(
     tweetCount,
     checkedAt,
     checks: {
-      mediaBan: unknown("現行IRithのサーバー側判定式は公開されていません"),
-      searchSensitiveBan: unknown(
-        "現行IRithのサーバー側判定式は公開されていません"
-      ),
+      mediaBan: unknown("現在、この項目を確認できません。"),
+      searchSensitiveBan: unknown("現在、この項目を確認できません。"),
       searchSuggestionBan,
       searchBan,
       ghostBan: unknown("本家では現在メンテナンス中です"),

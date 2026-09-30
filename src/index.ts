@@ -425,10 +425,13 @@ async function finishShadowban(
       components: []
     });
   } catch (error) {
+    console.error(
+      "X account-state check failed:",
+      error instanceof Error ? error.message : String(error)
+    );
     await editOriginalInteraction(interaction, {
       content:
-        "チェックに失敗しました: " +
-        (error instanceof Error ? error.message : String(error)),
+        "現在、Xの状態を確認できません。時間を空けてもう一度お試しください。",
       embeds: [],
       components: []
     });
