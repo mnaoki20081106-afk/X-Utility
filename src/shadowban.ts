@@ -1,8 +1,3 @@
-import {
-  ClientTransaction,
-  fetchXDocument
-} from "x-client-transaction-id";
-
 type CheckState = "clear" | "banned" | "unknown" | "na";
 
 export type ShadowbanItem = {
@@ -33,60 +28,94 @@ const PUBLIC_BEARER =
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-  "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
+  "(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";
 
-const USER_BY_SCREEN_NAME_ID = "k5XapwcSikNsEsILW5FvgA";
-const SEARCH_TIMELINE_ID = "AIdc203rPpK_k_2KWSdm7g";
+// Current x.com bundle IDs observed by XActions / TwitterInternalAPIDocument.
+const USER_BY_SCREEN_NAME_ID = "Gb-d6r0vxPOADdG62OEBpQ";
+const SEARCH_TIMELINE_ID = "hyPfJYJ_XAtDYoslQc-Rgg";
 
 const USER_FEATURES = {
-  hidden_profile_likes_enabled: true,
+  creator_subscriptions_tweet_preview_api_enabled: true,
   hidden_profile_subscriptions_enabled: true,
-  responsive_web_graphql_exclude_directive_enabled: true,
-  verified_phone_label_enabled: false,
+  highlights_tweets_tab_ui_enabled: true,
+  profile_label_improvements_pcf_label_in_post_enabled: true,
+  responsive_web_graphql_timeline_navigation_enabled: true,
+  responsive_web_profile_redirect_enabled: true,
+  responsive_web_twitter_article_notes_tab_enabled: true,
+  rweb_tipjar_consumption_enabled: false,
+  subscriptions_feature_can_gift_premium: true,
   subscriptions_verification_info_is_identity_verified_enabled: true,
   subscriptions_verification_info_verified_since_enabled: true,
-  highlights_tweets_tab_ui_enabled: true,
-  responsive_web_twitter_article_notes_tab_enabled: true,
-  creator_subscriptions_tweet_preview_api_enabled: true,
-  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-  responsive_web_graphql_timeline_navigation_enabled: true
+  verified_phone_label_enabled: false,
+  responsive_web_graphql_exclude_directive_enabled: true,
+  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false
 };
 
 const SEARCH_FEATURES = {
-  rweb_video_screen_enabled: false,
-  profile_label_improvements_pcf_label_in_post_enabled: true,
-  rweb_tipjar_consumption_enabled: true,
-  verified_phone_label_enabled: false,
-  creator_subscriptions_tweet_preview_api_enabled: true,
-  responsive_web_graphql_timeline_navigation_enabled: true,
-  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-  premium_content_api_read_enabled: false,
-  communities_web_enable_tweet_community_results_fetch: true,
-  c9s_tweet_anatomy_moderator_badge_enabled: true,
-  responsive_web_grok_analyze_button_fetch_trends_enabled: false,
-  responsive_web_grok_analyze_post_followups_enabled: true,
-  responsive_web_jetfuel_frame: false,
-  responsive_web_grok_share_attachment_enabled: true,
   articles_preview_enabled: true,
-  responsive_web_edit_tweet_api_enabled: true,
-  graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
-  view_counts_everywhere_api_enabled: true,
-  longform_notetweets_consumption_enabled: true,
-  responsive_web_twitter_article_tweet_consumption_enabled: true,
-  tweet_awards_web_tipping_enabled: false,
-  responsive_web_grok_show_grok_translated_post: false,
-  responsive_web_grok_analysis_button_from_backend: false,
-  creator_subscriptions_quote_tweet_preview_enabled: false,
+  c9s_tweet_anatomy_moderator_badge_enabled: true,
+  communities_web_enable_tweet_community_results_fetch: true,
+  content_disclosure_ai_generated_indicator_enabled: true,
+  content_disclosure_indicator_enabled: true,
+  creator_subscriptions_tweet_preview_api_enabled: true,
   freedom_of_speech_not_reach_fetch_enabled: true,
+  graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+  longform_notetweets_consumption_enabled: true,
+  longform_notetweets_inline_media_enabled: false,
+  longform_notetweets_rich_text_read_enabled: true,
+  post_ctas_fetch_enabled: false,
+  premium_content_api_read_enabled: false,
+  profile_label_improvements_pcf_label_in_post_enabled: true,
+  responsive_web_edit_tweet_api_enabled: true,
+  responsive_web_enhance_cards_enabled: false,
+  responsive_web_graphql_timeline_navigation_enabled: true,
+  responsive_web_grok_analysis_button_from_backend: true,
+  responsive_web_grok_analyze_button_fetch_trends_enabled: false,
+  responsive_web_grok_analyze_post_followups_enabled: false,
+  responsive_web_grok_annotations_enabled: true,
+  responsive_web_grok_community_note_auto_translation_is_enabled: true,
+  responsive_web_grok_image_annotation_enabled: true,
+  responsive_web_grok_imagine_annotation_enabled: true,
+  responsive_web_grok_share_attachment_enabled: true,
+  responsive_web_grok_show_grok_translated_post: true,
+  responsive_web_jetfuel_frame: true,
+  responsive_web_profile_redirect_enabled: true,
+  responsive_web_twitter_article_tweet_consumption_enabled: true,
+  rweb_cashtags_composer_attachment_enabled: true,
+  rweb_cashtags_enabled: true,
+  rweb_tipjar_consumption_enabled: false,
+  rweb_video_screen_enabled: false,
   standardized_nudges_misinfo: true,
   tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
-  longform_notetweets_rich_text_read_enabled: true,
-  longform_notetweets_inline_media_enabled: true,
-  responsive_web_grok_image_annotation_enabled: true,
-  responsive_web_enhance_cards_enabled: false
+  verified_phone_label_enabled: false,
+  view_counts_everywhere_api_enabled: true,
+  responsive_web_graphql_exclude_directive_enabled: true,
+  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+  tweet_awards_web_tipping_enabled: false
+};
+
+const SEARCH_FIELD_TOGGLES = {
+  withArticlePlainText: false,
+  withArticleRichContentState: true,
+  withArticleSummaryText: false,
+  withArticleVoiceOver: false,
+  withAuxiliaryUserLabels: false,
+  withDisallowedReplyControls: false,
+  withGrokAnalyze: false,
+  withPayments: false
 };
 
 let guestToken: { value: string; expiresAt: number } | null = null;
+
+class XApiError extends Error {
+  status: number;
+
+  constructor(status: number, detail: string) {
+    super("X API " + status + (detail ? ": " + detail : ""));
+    this.name = "XApiError";
+    this.status = status;
+  }
+}
 
 function cleanUsername(value: string): string {
   const username = value.trim().replace(/^@+/, "");
@@ -116,7 +145,7 @@ async function getGuestToken(): Promise<string> {
   }
 
   const response = await fetchTimeout(
-    "https://api.twitter.com/1.1/guest/activate.json",
+    "https://api.x.com/1.1/guest/activate.json",
     {
       method: "POST",
       headers: {
@@ -128,7 +157,10 @@ async function getGuestToken(): Promise<string> {
   );
 
   if (!response.ok) {
-    throw new Error("Xの公開セッションを開始できませんでした");
+    throw new XApiError(
+      response.status,
+      (await response.text().catch(() => "")).slice(0, 160)
+    );
   }
 
   const body = (await response.json()) as { guest_token?: string };
@@ -143,39 +175,25 @@ async function getGuestToken(): Promise<string> {
   return guestToken.value;
 }
 
-async function createTransactionClient(): Promise<any> {
-  const response = await fetchXDocument();
-  return ClientTransaction.create(response);
-}
-
 async function xGet(
   path: string,
-  searchParams: Record<string, string>,
-  transactionClient: any
+  searchParams: Record<string, string>
 ): Promise<any> {
-  const url = new URL(path, "https://api.twitter.com/");
+  const url = new URL(path, "https://x.com/i/api/");
   for (const [key, value] of Object.entries(searchParams)) {
     url.searchParams.set(key, value);
   }
 
-  const transactionId = await transactionClient.generateTransactionId(
-    "GET",
-    url.pathname
-  );
-
   const response = await fetchTimeout(url, {
     headers: {
+      accept: "*/*",
       authorization: "Bearer " + PUBLIC_BEARER,
-      "sec-ch-ua":
-        '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
+      origin: "https://x.com",
+      referer: "https://x.com/",
       "sec-fetch-dest": "empty",
       "sec-fetch-mode": "cors",
       "sec-fetch-site": "same-origin",
-      "sec-gpc": "1",
       "user-agent": USER_AGENT,
-      "x-client-transaction-id": transactionId,
       "x-guest-token": await getGuestToken(),
       "x-twitter-active-user": "yes",
       "x-twitter-client-language": "ja"
@@ -187,9 +205,7 @@ async function xGet(
     if (response.status === 429) {
       throw new Error("X側のレート制限中です");
     }
-    throw new Error(
-      "X API " + response.status + ": " + detail.slice(0, 160)
-    );
+    throw new XApiError(response.status, detail.slice(0, 160));
   }
 
   return response.json();
@@ -205,10 +221,6 @@ function banned(detail: string): ShadowbanItem {
 
 function unknown(detail: string): ShadowbanItem {
   return { state: "unknown", detail };
-}
-
-function na(detail: string): ShadowbanItem {
-  return { state: "na", detail };
 }
 
 function baseChecks(detail: string, state: CheckState): ShadowbanResult["checks"] {
@@ -232,33 +244,120 @@ function displayNameFromUser(user: any, fallback: string): string {
   );
 }
 
+function searchTimelineHasOwnTweet(payload: any, username: string): boolean {
+  const timeline =
+    payload?.data?.search_by_raw_query?.search_timeline?.timeline;
+  const instructions = Array.isArray(timeline?.instructions)
+    ? timeline.instructions
+    : [];
+
+  for (const instruction of instructions) {
+    const entries = Array.isArray(instruction?.entries)
+      ? instruction.entries
+      : [];
+    for (const entry of entries) {
+      if (!String(entry?.entryId ?? "").startsWith("tweet-")) continue;
+      const screenName =
+        entry?.content?.itemContent?.tweet_results?.result?.core?.user_results
+          ?.result?.legacy?.screen_name;
+      if (screenName === username) return true;
+    }
+  }
+  return false;
+}
+
+async function checkSearchBan(username: string): Promise<ShadowbanItem> {
+  try {
+    const searchResponse = await xGet(
+      "graphql/" + SEARCH_TIMELINE_ID + "/SearchTimeline",
+      {
+        variables: JSON.stringify({
+          rawQuery: "from:" + username,
+          count: 20,
+          querySource: "typed_query",
+          product: "Top"
+        }),
+        features: JSON.stringify(SEARCH_FEATURES),
+        fieldToggles: JSON.stringify(SEARCH_FIELD_TOGGLES)
+      }
+    );
+
+    return searchTimelineHasOwnTweet(searchResponse, username)
+      ? clear("Top検索に本人のポストを確認できました")
+      : banned("Top検索に本人のポストが見つかりませんでした");
+  } catch (error) {
+    if (error instanceof XApiError && error.status === 404) {
+      return unknown(
+        "現在のXでは未ログインセッションからSearchTimelineを利用できません"
+      );
+    }
+    return unknown(
+      "Top検索を取得できません: " +
+        (error instanceof Error ? error.message : String(error))
+    );
+  }
+}
+
+async function checkSearchSuggestion(
+  username: string,
+  displayName: string
+): Promise<ShadowbanItem> {
+  try {
+    const suggestionResponse = await xGet(
+      "1.1/search/typeahead.json",
+      {
+        include_ext_is_blue_verified: "1",
+        include_ext_verified_type: "1",
+        include_ext_profile_image_shape: "1",
+        q: "@" + username + " " + displayName,
+        src: "search_box",
+        result_type: "events,users,topics,lists"
+      }
+    );
+
+    const users = Array.isArray(suggestionResponse?.users)
+      ? suggestionResponse.users
+      : [];
+
+    const found = users.some(
+      (user: any) => user?.screen_name === username
+    );
+
+    return found
+      ? clear("検索候補に本人のアカウントを確認できました")
+      : banned("検索候補に本人のアカウントが見つかりませんでした");
+  } catch (error) {
+    return unknown(
+      "検索候補を取得できません: " +
+        (error instanceof Error ? error.message : String(error))
+    );
+  }
+}
+
 export async function checkShadowban(
   input: string
 ): Promise<ShadowbanResult> {
   const requestedUsername = cleanUsername(input);
-  const transactionClient = await createTransactionClient();
 
   const userResponse = await xGet(
     "graphql/" + USER_BY_SCREEN_NAME_ID + "/UserByScreenName",
     {
       variables: JSON.stringify({
         screen_name: requestedUsername,
-        withSafetyModeUserFields: true
+        withGrokTranslatedBio: false
       }),
       features: JSON.stringify(USER_FEATURES),
       fieldToggles: JSON.stringify({
-        withAuxiliaryUserLabels: false
+        withAuxiliaryUserLabels: false,
+        withPayments: false
       })
-    },
-    transactionClient
+    }
   );
 
   const user = userResponse?.data?.user;
   const result = user?.result ?? null;
   const checkedAt = new Date().toISOString();
 
-  // IRith's published implementation treats a missing "user" separately from
-  // a non-User result. Keep those two states distinct.
   if (!user) {
     return {
       username: requestedUsername,
@@ -318,62 +417,10 @@ export async function checkShadowban(
     };
   }
 
-  const searchResponse = await xGet(
-    "graphql/" + SEARCH_TIMELINE_ID + "/SearchTimeline",
-    {
-      variables: JSON.stringify({
-        rawQuery: "from:" + username,
-        count: 20,
-        querySource: "typed_query",
-        product: "Top"
-      }),
-      features: JSON.stringify(SEARCH_FEATURES)
-    },
-    transactionClient
-  );
-
-  const searchTimeline =
-    searchResponse.data.search_by_raw_query.search_timeline;
-
-  let searchBanFlag = true;
-  for (const instruction of searchTimeline.timeline.instructions) {
-    for (const entry of instruction.entries) {
-      if (entry.entryId.startsWith("tweet-")) {
-        if (
-          entry.content.itemContent.tweet_results.result.core.user_results
-            .result.legacy.screen_name === username
-        ) {
-          searchBanFlag = false;
-          break;
-        }
-      }
-    }
-  }
-
-  const suggestionResponse = await xGet(
-    "1.1/search/typeahead.json",
-    {
-      include_ext_is_blue_verified: "1",
-      include_ext_verified_type: "1",
-      include_ext_profile_image_shape: "1",
-      q: "@" + username + " " + displayName,
-      src: "search_box",
-      result_type: "events,users,topics,lists"
-    },
-    transactionClient
-  );
-
-  const suggestionUsers = Array.isArray(suggestionResponse?.users)
-    ? suggestionResponse.users
-    : [];
-
-  let searchSuggestionBanFlag = true;
-  for (const suggestionUser of suggestionUsers) {
-    if (suggestionUser.screen_name === username) {
-      searchSuggestionBanFlag = false;
-      break;
-    }
-  }
+  const [searchBan, searchSuggestionBan] = await Promise.all([
+    checkSearchBan(username),
+    checkSearchSuggestion(username, displayName)
+  ]);
 
   return {
     username,
@@ -384,19 +431,12 @@ export async function checkShadowban(
     tweetCount,
     checkedAt,
     checks: {
-      // Current IRith calculates these server-side. The supplied client bundle
-      // only receives the booleans; its private server-side formula is not
-      // present in the bundle or the published repository.
       mediaBan: unknown("現行IRithのサーバー側判定式は公開されていません"),
       searchSensitiveBan: unknown(
         "現行IRithのサーバー側判定式は公開されていません"
       ),
-      searchSuggestionBan: searchSuggestionBanFlag
-        ? banned("検索候補に本人のアカウントが見つかりませんでした")
-        : clear("検索候補に本人のアカウントを確認できました"),
-      searchBan: searchBanFlag
-        ? banned("Top検索に本人のポストが見つかりませんでした")
-        : clear("Top検索に本人のポストを確認できました"),
+      searchSuggestionBan,
+      searchBan,
       ghostBan: unknown("本家では現在メンテナンス中です"),
       replyDeboosting: unknown("本家では現在メンテナンス中です")
     }
