@@ -17,6 +17,7 @@ export type ShadowbanResult = {
   notFound: boolean;
   protected: boolean;
   suspended: boolean;
+  noTweet: boolean;
   tweetCount: number | null;
   checkedAt: string;
   checks: {
@@ -418,20 +419,36 @@ export async function checkShadowban(
 ): Promise<ShadowbanResult> {
   const requestedUsername = cleanUsername(input);
 
-  const userResponse = await xGet(
-    "graphql/" + USER_BY_SCREEN_NAME_ID + "/UserByScreenName",
-    {
-      variables: JSON.stringify({
-        screen_name: requestedUsername,
-        withGrokTranslatedBio: false
-      }),
-      features: JSON.stringify(USER_FEATURES),
-      fieldToggles: JSON.stringify({
-        withAuxiliaryUserLabels: false,
-        withPayments: false
-      })
-    }
-  );
+  let transactionClient: any | null = null;
+  if (credential) {
+    transactionClient = await ClientTransaction.create(await fetchXDocument());
+  }
+
+  const userQuery = {
+    variables: JSON.stringify({
+      screen_name: requestedUsername,
+      withSafetyModeUserFields: true,
+      withGrokTranslatedBio: false
+    }),
+    features: JSON.stringify(USER_FEATURES),
+    fieldToggles: JSON.stringify({
+      withAuxiliaryUserLabels: false,
+      withPayments: false
+    })
+  };
+
+  const userResponse =
+    credential && transactionClient
+      ? await authenticatedXGet(
+          "graphql/" + USER_BY_SCREEN_NAME_ID + "/UserByScreenName",
+          userQuery,
+          credential,
+          transactionClient
+        )
+      : await xGet(
+          "graphql/" + USER_BY_SCREEN_NAME_ID + "/UserByScreenName",
+          userQuery
+        );
 
   const user = userResponse?.data?.user;
   const result = user?.result ?? null;
@@ -444,6 +461,7 @@ export async function checkShadowban(
       notFound: true,
       protected: false,
       suspended: false,
+      noTweet: false,
       tweetCount: null,
       checkedAt,
       checks: baseChecks("ユーザーが見つかりませんでした", "na")
@@ -457,6 +475,7 @@ export async function checkShadowban(
       notFound: false,
       protected: false,
       suspended: true,
+      noTweet: false,
       tweetCount: null,
       checkedAt,
       checks: baseChecks("ユーザーが凍結されています", "na")
@@ -477,22 +496,35 @@ export async function checkShadowban(
       notFound: false,
       protected: true,
       suspended: false,
+      noTweet: false,
       tweetCount,
       checkedAt,
       checks: baseChecks("非公開アカウントのため判定対象外です", "na")
     };
   }
 
-  let transactionClient: any | null = null;
-  if (credential) {
-    try {
-      transactionClient = await ClientTransaction.create(await fetchXDocument());
-    } catch (error) {
-      console.error(
-        "X transaction client init failed:",
-        error instanceof Error ? error.message : String(error)
-      );
-    }
+  // IRith's published backend returns no_tweet=true and false for the
+  // search-ban booleans without attempting SearchTimeline/typeahead.
+  // The current client also keeps rendering those boolean results.
+  if ((tweetCount ?? 0) === 0) {
+    return {
+      username,
+      displayName,
+      notFound: false,
+      protected: false,
+      suspended: false,
+      noTweet: true,
+      tweetCount: 0,
+      checkedAt,
+      checks: {
+        mediaBan: clear("投稿0件のアカウントです"),
+        searchSensitiveBan: clear("投稿0件のアカウントです"),
+        searchSuggestionBan: clear("投稿0件のアカウントです"),
+        searchBan: clear("投稿0件のアカウントです"),
+        ghostBan: unknown("本家では現在メンテナンス中です"),
+        replyDeboosting: unknown("本家では現在メンテナンス中です")
+      }
+    };
   }
 
   const [searchBan, searchSuggestionBan] = await Promise.all([
@@ -511,6 +543,7 @@ export async function checkShadowban(
     notFound: false,
     protected: false,
     suspended: false,
+    noTweet: false,
     tweetCount,
     checkedAt,
     checks: {
