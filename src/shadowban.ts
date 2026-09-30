@@ -421,7 +421,14 @@ export async function checkShadowban(
 
   let transactionClient: any | null = null;
   if (credential) {
-    transactionClient = await ClientTransaction.create(await fetchXDocument());
+    try {
+      transactionClient = await ClientTransaction.create(await fetchXDocument());
+    } catch (error) {
+      console.error(
+        "X transaction client init failed:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
   }
 
   const userQuery = {
