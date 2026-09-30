@@ -30,6 +30,11 @@ export function decodeBase32(value: string): Uint8Array {
     }
   }
 
+  // RFC 4648 Base32 permits only these unpadded lengths. Nonzero trailing
+  // bits would otherwise be silently discarded, accepting a mistyped key.
+  if (![0, 2, 4, 5, 7].includes(input.length % 8) || buffer !== 0) {
+    throw new Error("2FAシークレットの長さまたは末尾が不正です");
+  }
   if (bytes.length === 0) {
     throw new Error("2FAシークレットが短すぎます");
   }
