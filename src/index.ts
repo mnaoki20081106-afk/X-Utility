@@ -7,6 +7,12 @@ import {
   type DiscordEnv
 } from "./discord";
 import { checkShadowban, type ShadowbanItem } from "./shadowban";
+import {
+  clearCredential,
+  credentialStatus,
+  loadCredential,
+  saveCredential
+} from "./search-credential";
 import { generateTotp } from "./totp";
 
 type RateLimiterBinding = {
@@ -14,6 +20,7 @@ type RateLimiterBinding = {
 };
 
 type Env = DiscordEnv & {
+  DB: D1Database;
   XUTILITY_BRIDGE_SECRET: string;
   SHADOWBAN_USER_LIMITER: RateLimiterBinding;
   SHADOWBAN_GLOBAL_LIMITER: RateLimiterBinding;
@@ -341,8 +348,15 @@ async function finishShadowban(
       return;
     }
 
+    const credential = await loadCredential(env).catch((error) => {
+      console.error(
+        "X search credential load failed:",
+        error instanceof Error ? error.message : String(error)
+      );
+      return null;
+    });
     const result = await withTimeout(
-      checkShadowban(username),
+      checkShadowban(username, credential),
       20_000
     );
     const checks = result.checks;
@@ -696,6 +710,50 @@ async function handleBridge(
   env: Env,
   url: URL
 ): Promise<Response | null> {
+  if (url.pathname === "/bridge/main/search-credential") {
+    const body = request.method === "GET" || request.method === "DELETE"
+      ? ""
+      : await request.text();
+    try {
+      await verifyBridgeRequest(request, env, url, body);
+
+      if (request.method === "GET") {
+        return json(await credentialStatus(env));
+      }
+
+      if (request.method === "PUT") {
+        let input: { session?: string; csrf?: string };
+        try {
+          input = JSON.parse(body) as { session?: string; csrf?: string };
+        } catch {
+          return json({ error: "INVALID_JSON" }, 400);
+        }
+
+        const session = String(input.session ?? "").trim();
+        const csrf = String(input.csrf ?? "").trim();
+        if (
+          session.length < 16 ||
+          csrf.length < 16 ||
+          /[\s;]/.test(session) ||
+          /[\s;]/.test(csrf)
+        ) {
+          return json({ error: "INVALID_SEARCH_CREDENTIAL" }, 400);
+        }
+
+        return json(await saveCredential(env, { session, csrf }));
+      }
+
+      if (request.method === "DELETE") {
+        await clearCredential(env);
+        return json({ configured: false, updatedAt: null });
+      }
+
+      return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+    } catch (error) {
+      return bridgeError(error);
+    }
+  }
+
   const match = url.pathname.match(
     /^\/bridge\/main\/guilds\/(\d+)\/panels\/(shadowban|2fa)$/
   );
@@ -792,6 +850,10 @@ export default {
         bot?.id === env.DISCORD_APPLICATION_ID?.trim();
       const bridgeConfigured =
         (env.XUTILITY_BRIDGE_SECRET?.trim().length ?? 0) >= 32;
+      const searchCredential = await credentialStatus(env).catch(() => ({
+        configured: false,
+        updatedAt: null
+      }));
       const interactionsReady =
         Boolean(interactionConfig?.verifyKeyAvailable) &&
         interactionConfig?.endpoint ===
@@ -810,6 +872,8 @@ export default {
           botUsername: bot?.username ?? null,
           applicationMatchesToken,
           bridgeConfigured,
+          searchCredentialConfigured: searchCredential.configured,
+          searchCredentialUpdatedAt: searchCredential.updatedAt,
           interactionsReady,
           interactionsEndpoint: interactionConfig?.endpoint ?? null,
           endpointWasRepaired: interactionConfig?.changed ?? false,

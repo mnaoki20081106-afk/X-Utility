@@ -1,4 +1,10 @@
+import { ClientTransaction, fetchXDocument } from "x-client-transaction-id";
 type CheckState = "clear" | "banned" | "unknown" | "na";
+
+export type SearchCredentialInput = {
+  session: string;
+  csrf: string;
+};
 
 export type ShadowbanItem = {
   state: CheckState;
@@ -211,6 +217,52 @@ async function xGet(
   return response.json();
 }
 
+async function authenticatedXGet(
+  path: string,
+  searchParams: Record<string, string>,
+  credential: SearchCredentialInput,
+  transactionClient: any
+): Promise<any> {
+  const url = new URL(path, "https://api.twitter.com/");
+  for (const [key, value] of Object.entries(searchParams)) {
+    url.searchParams.set(key, value);
+  }
+
+  const transactionId = await transactionClient.generateTransactionId(
+    "GET",
+    url.pathname
+  );
+
+  const response = await fetchTimeout(url, {
+    headers: {
+      accept: "*/*",
+      authorization: "Bearer " + PUBLIC_BEARER,
+      cookie:
+        "auth_token=" + credential.session +
+        "; ct0=" + credential.csrf,
+      origin: "https://x.com",
+      referer: "https://x.com/",
+      "sec-fetch-dest": "empty",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-origin",
+      "user-agent": USER_AGENT,
+      "x-client-transaction-id": transactionId,
+      "x-csrf-token": credential.csrf,
+      "x-twitter-active-user": "yes",
+      "x-twitter-auth-type": "OAuth2Session",
+      "x-twitter-client-language": "ja"
+    }
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new XApiError(response.status, detail.slice(0, 160));
+  }
+
+  return response.json();
+}
+
+
 function clear(detail: string): ShadowbanItem {
   return { state: "clear", detail };
 }
@@ -266,9 +318,18 @@ function searchTimelineHasOwnTweet(payload: any, username: string): boolean {
   return false;
 }
 
-async function checkSearchBan(username: string): Promise<ShadowbanItem> {
+async function checkSearchBan(
+  username: string,
+  credential: SearchCredentialInput | null,
+  transactionClient: any | null
+): Promise<ShadowbanItem> {
   try {
-    const searchResponse = await xGet(
+    if (!credential || !transactionClient) {
+      return unknown(
+        "現在、この項目を確認できません。時間を空けてもう一度お試しください。"
+      );
+    }
+    const searchResponse = await authenticatedXGet(
       "graphql/" + SEARCH_TIMELINE_ID + "/SearchTimeline",
       {
         variables: JSON.stringify({
@@ -279,7 +340,9 @@ async function checkSearchBan(username: string): Promise<ShadowbanItem> {
         }),
         features: JSON.stringify(SEARCH_FEATURES),
         fieldToggles: JSON.stringify(SEARCH_FIELD_TOGGLES)
-      }
+      },
+      credential,
+      transactionClient
     );
 
     return searchTimelineHasOwnTweet(searchResponse, username)
@@ -303,10 +366,17 @@ async function checkSearchBan(username: string): Promise<ShadowbanItem> {
 
 async function checkSearchSuggestion(
   username: string,
-  displayName: string
+  displayName: string,
+  credential: SearchCredentialInput | null,
+  transactionClient: any | null
 ): Promise<ShadowbanItem> {
   try {
-    const suggestionResponse = await xGet(
+    if (!credential || !transactionClient) {
+      return unknown(
+        "現在、この項目を確認できません。時間を空けてもう一度お試しください。"
+      );
+    }
+    const suggestionResponse = await authenticatedXGet(
       "1.1/search/typeahead.json",
       {
         include_ext_is_blue_verified: "1",
@@ -315,7 +385,9 @@ async function checkSearchSuggestion(
         q: "@" + username + " " + displayName,
         src: "search_box",
         result_type: "events,users,topics,lists"
-      }
+      },
+      credential,
+      transactionClient
     );
 
     const users = Array.isArray(suggestionResponse?.users)
@@ -341,7 +413,8 @@ async function checkSearchSuggestion(
 }
 
 export async function checkShadowban(
-  input: string
+  input: string,
+  credential: SearchCredentialInput | null = null
 ): Promise<ShadowbanResult> {
   const requestedUsername = cleanUsername(input);
 
@@ -410,9 +483,26 @@ export async function checkShadowban(
     };
   }
 
+  let transactionClient: any | null = null;
+  if (credential) {
+    try {
+      transactionClient = await ClientTransaction.create(await fetchXDocument());
+    } catch (error) {
+      console.error(
+        "X transaction client init failed:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
   const [searchBan, searchSuggestionBan] = await Promise.all([
-    checkSearchBan(username),
-    checkSearchSuggestion(username, displayName)
+    checkSearchBan(username, credential, transactionClient),
+    checkSearchSuggestion(
+      username,
+      displayName,
+      credential,
+      transactionClient
+    )
   ]);
 
   return {

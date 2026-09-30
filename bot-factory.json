@@ -5,7 +5,12 @@
   "working_directory": ".",
   "wrangler_config": "wrangler.jsonc",
   "d1_migrations": [],
-  "d1_schema_files": [],
+  "d1_schema_files": [
+    {
+      "binding": "DB",
+      "file": "schema.sql"
+    }
+  ],
   "setup": {
     "title": "X-Utility",
     "description": "XのシャドウバンチェックとTOTP 2FAコード生成だけを提供するDiscord BOTです。Xaccount-Bot管理画面からパネルを設置する場合は、両BOTに同じ連携Secretを設定します。",
