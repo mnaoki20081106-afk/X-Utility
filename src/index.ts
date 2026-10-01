@@ -189,6 +189,9 @@ function fromBase64Url(value: string): Uint8Array {
 }
 
 async function totpStateKey(secret: string): Promise<CryptoKey> {
+  if (typeof secret !== "string" || secret.trim().length < 32) {
+    throw new Error("XUTILITY_BRIDGE_SECRETが未設定です");
+  }
   const digest = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode("x-utility:totp-state:" + secret)

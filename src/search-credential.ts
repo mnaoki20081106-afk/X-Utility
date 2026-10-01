@@ -101,6 +101,7 @@ export async function saveCredential(
   const csrf = input.csrf.trim();
   if (!session || !csrf) throw new Error("SEARCH_CREDENTIAL_INCOMPLETE");
 
+  await ensureSchema(env);
   const updatedAt = Date.now();
   const [sessionEnc, csrfEnc] = await Promise.all([
     seal(env.XUTILITY_BRIDGE_SECRET, session),
