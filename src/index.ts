@@ -14,6 +14,7 @@ import {
   saveCredential
 } from "./search-credential";
 import { generateTotp } from "./totp";
+import { accountPageResponse } from "./account-page";
 
 type RateLimiterBinding = {
   limit(input: { key: string }): Promise<{ success: boolean }>;
@@ -99,6 +100,20 @@ function totpPanelPayload() {
       }
     ],
     allowed_mentions: { parse: [] }
+  };
+}
+
+function accountFormatPanelPayload(origin: string) {
+  return {
+    embeds: [{
+      title: "X アカウント形式判別",
+      description: "納品された文字列から、ID・パスワード・メール・2FAキーなどを一覧に整理します。\nボタンで判別画面を開き、各項目をタップでコピーできます。\n入力した情報は端末内で処理します。",
+      color: 0x2676dd
+    }],
+    components: [{type: 1, components: [{
+      type: 2, style: 5, label: "形式を判別・コピー", url: origin + "/account-format"
+    }]}],
+    allowed_mentions: {parse: []}
   };
 }
 
@@ -758,7 +773,7 @@ async function handleBridge(
   }
 
   const match = url.pathname.match(
-    /^\/bridge\/main\/guilds\/(\d+)\/panels\/(shadowban|2fa)$/
+    /^\/bridge\/main\/guilds\/(\d+)\/panels\/(shadowban|2fa|account-format)$/
   );
   if (!match) return null;
   if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
@@ -774,7 +789,7 @@ async function handleBridge(
     }
 
     const guildId = match[1]!;
-    const kind = match[2] as "shadowban" | "2fa";
+    const kind = match[2] as "shadowban" | "2fa" | "account-format";
 
     await ensureInteractionsEndpoint(env, url.origin);
 
@@ -803,7 +818,7 @@ async function handleBridge(
         body: JSON.stringify(
           kind === "shadowban"
             ? shadowbanPanelPayload()
-            : totpPanelPayload()
+            : kind === "2fa" ? totpPanelPayload() : accountFormatPanelPayload(url.origin)
         )
       }
     );
@@ -826,6 +841,12 @@ export default {
     ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === "/account-format" || url.pathname === "/account-format.js") {
+      if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", {status:405,headers:{Allow:"GET, HEAD"}});
+      const response = accountPageResponse(url.pathname.endsWith(".js"));
+      return request.method === "HEAD" ? new Response(null, {headers: response.headers}) : response;
+    }
 
     if (url.pathname === "/" || url.pathname === "/health") {
       let bot: { id: string; username: string } | null = null;

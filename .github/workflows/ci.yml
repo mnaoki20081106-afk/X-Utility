@@ -20,4 +20,5 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run typecheck
+      - run: npm run test
       - run: npx wrangler deploy --dry-run --outdir /tmp/xutility-dist

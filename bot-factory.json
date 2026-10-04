@@ -13,7 +13,7 @@
   ],
   "setup": {
     "title": "X-Utility",
-    "description": "XのシャドウバンチェックとTOTP 2FAコード生成だけを提供するDiscord BOTです。Xaccount-Bot管理画面からパネルを設置する場合は、両BOTに同じ連携Secretを設定します。",
+    "description": "Xのシャドウバンチェック、TOTP 2FAコード生成、アカウント形式判別・コピーを提供するDiscord BOTです。Xaccount-Bot管理画面からパネルを設置する場合は、両BOTに同じ連携Secretを設定します。",
     "fields": [
       {
         "key": "DISCORD_BOT_TOKEN",

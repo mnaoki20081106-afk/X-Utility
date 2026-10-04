@@ -5,15 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck",
+    "typecheck": "npm run build:account && tsc --noEmit && tsc --noEmit -p tsconfig.browser.json",
     "deploy": "wrangler deploy",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.*",
+    "build:account": "node scripts/build-account-browser.mjs",
+    "pretest": "npm run build:account"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260923.1",
     "typescript": "^5.9.2",
-    "wrangler": "^4.142.0"
+    "wrangler": "^4.142.0",
+    "esbuild": "0.28.1",
+    "jsdom": "30.1.1"
   },
   "dependencies": {
     "x-client-transaction-id": "^0.3.1"
