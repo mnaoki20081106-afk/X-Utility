@@ -18,6 +18,7 @@
     "src/**/*.ts"
   ],
   "exclude": [
-    "src/account-browser.ts"
+    "src/account-browser.ts",
+    "src/login-tutorial.ts"
   ]
 }

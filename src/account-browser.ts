@@ -1,3 +1,4 @@
+import { LoginTutorial } from "./login-tutorial";
 import { parseAccount, FIELD_LABELS, type AccountField, type ParsedAccount } from "./account-format";
 import { FORMAT_CATALOG, FORMAT_COVERAGE } from "./generated/hstora-formats";
 
@@ -5,6 +6,9 @@ const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as
 const account=el<HTMLTextAreaElement>("account"), product=el<HTMLSelectElement>("product");
 const template=el<HTMLInputElement>("template"), separator=el<HTMLSelectElement>("separator");
 let parsed: ParsedAccount | null = null;
+let activeFields: AccountField[]=[];
+const tutorial=new LoginTutorial(copy);
+el("tutorial-show").addEventListener("click",()=>tutorial.open(activeFields));
 function productOptions(filter="") {
   const previous=product.value;
   product.replaceChildren(new Option("自動判別", ""));
@@ -38,6 +42,7 @@ async function copy(value: string, label: string) {
   }
 }
 function fieldsView(fields: AccountField[]) {
+  tutorial.close();activeFields=fields;
   el("fields").replaceChildren();
   fields.forEach((field,i)=>{
     const row=document.createElement("div");row.className="field";
@@ -48,7 +53,7 @@ function fieldsView(fields: AccountField[]) {
     button.setAttribute("aria-label",field.label+"をコピー");
     const input=document.createElement("input");input.readOnly=true;input.value=field.value;input.autocomplete="off";input.spellcheck=false;
     input.setAttribute("aria-label",field.label);input.addEventListener("focus",()=>input.select());
-    selector.addEventListener("change",()=>{field.key=selector.value;field.label=FIELD_LABELS[field.key]!;button.setAttribute("aria-label",field.label+"をコピー");input.setAttribute("aria-label",field.label);});
+    selector.addEventListener("change",()=>{tutorial.close();field.key=selector.value;field.label=FIELD_LABELS[field.key]!;button.setAttribute("aria-label",field.label+"をコピー");input.setAttribute("aria-label",field.label);});
     button.addEventListener("click",()=>void copy(field.value,FIELD_LABELS[selector.value]!));
     row.append(selector,button,input);
     if (field.confidence!=="format") {const note=document.createElement("small");note.textContent=field.confidence==="candidate"?"値の形による候補・要確認":"未判別・項目名を選択してください";row.append(note);}
@@ -61,11 +66,13 @@ function sourcesView(ids: string[]) {
   el("sources").textContent=sellers.length?"形式の掲載ショップ: "+sellers.join(" / "):"";
 }
 function reset() {
+  tutorial.close();activeFields=[];
   account.value="";template.value="";parsed=null;
   el("fields").replaceChildren();el("sources").replaceChildren();el("candidate").replaceChildren();
   el("results").hidden=true;el("error").textContent="";el("status").textContent="";el("warning").textContent="";
 }
 el("parse").addEventListener("click",()=>{
+  tutorial.close();activeFields=[];
   el("error").textContent="";el("status").textContent="";
   try {
     parsed=parseAccount(account.value,FORMAT_CATALOG,{productId:product.value,format:template.value,separator:separator.value});
