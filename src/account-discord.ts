@@ -7,6 +7,11 @@ const PREFIX='xutil:account:';
 type Env={XUTILITY_BRIDGE_SECRET:string};
 type Embed={title?:string;description?:string;fields?:{name:string;value:string;inline?:boolean}[];color?:number;footer?:{text:string}};
 const block=(value:string)=>'```\n'+value+'\n```';
+const tapValue=(value:string)=>value && !value.includes('`')?'**`'+value+'`**':block(value);
+function readValue(value:string):string {
+ if(value.startsWith('**`') && value.endsWith('`**'))return value.slice(3,-3);
+ return unblock(value);
+}
 function unblock(value:string):string {
  if(!value.startsWith('```\n') || !value.endsWith('\n```'))throw new Error('INVALID_STATE');
  return value.slice(4,-4);
@@ -29,7 +34,7 @@ function form(format='',tutorial=false) {
  ]);
 }
 export function accountFormatPanelPayload() {
- return {embeds:[{title:'X アカウント形式判別',description:'Discord内のフォームに納品文字列を入力すると、あなたにだけ判別結果を表示します。\n項目別のコピー用フォーム・ログインチュートリアル・2FA生成もこの中で使えます。\n入力はDiscord経由で処理し、DBやログには保存しません。',color:0x2676dd}],components:[row(button('形式判別',ACCOUNT_OPEN,1),button('チュートリアル',PREFIX+'open-tutorial',2))],allowed_mentions:{parse:[]}};
+ return {embeds:[{title:'X アカウント形式判別',description:'Discord内のフォームに納品文字列を入力すると、あなたにだけ判別結果を表示します。\n表示された値をタップしてコピーできます。ログインチュートリアル・2FA生成もこの中で使えます。\n入力はDiscord経由で処理し、DBやログには保存しません。',color:0x2676dd}],components:[row(button('形式判別',ACCOUNT_OPEN,1),button('チュートリアル',PREFIX+'open-tutorial',2))],allowed_mentions:{parse:[]}};
 }
 // All state is the user's visible ephemeral message. Bind its content to the
 // user and expiry so no raw credentials are stored in custom IDs or a database.
@@ -61,7 +66,7 @@ function displayFields(fields:AccountField[]):Embed[] {
  const entries:{name:string;value:string;inline:boolean}[]=[];
  for(const [index,f] of fields.entries()) {
   const count=Math.max(1,Math.ceil(f.value.length/1000));
-  for(let part=0;part<count;part++)entries.push({name:`${index+1}. ${FIELD_LABELS[f.key]??'未判別'}${count>1?` (${part+1}/${count})`:''}`,value:block(f.value.slice(part*1000,(part+1)*1000)),inline:false});
+  for(let part=0;part<count;part++)entries.push({name:`${index+1}. ${FIELD_LABELS[f.key]??'未判別'}${count>1?` (${part+1}/${count})`:''}`,value:tapValue(f.value.slice(part*1000,(part+1)*1000)),inline:false});
  }
  const embeds:Embed[]=[];
  for(let i=0;i<entries.length;i+=25)embeds.push({fields:entries.slice(i,i+25)});
@@ -74,7 +79,7 @@ function restoreFields(embeds:Embed[]):AccountField[] {
   const m=entry.name.match(/^(\d+)\. (.+?)(?: \((\d+)\/(\d+)\))?$/);if(!m)continue;
   const index=Number(m[1])-1;const key=Object.keys(FIELD_LABELS).find(k=>FIELD_LABELS[k]===m[2]);
   if(!key || index<0 || index>=24)throw new Error('INVALID_STATE');
-  const raw=unblock(entry.value);
+  const raw=readValue(entry.value);
   if(!m[3] || m[3]==='1')fields[index]={key,label:FIELD_LABELS[key]!,value:raw,confidence:embeds[0]?.footer?.text==='確認済み'?'format':'candidate'};
   else {if(!fields[index])throw new Error('INVALID_STATE');fields[index]!.value+=raw;}
  }
@@ -91,15 +96,12 @@ async function result(fields:AccountField[],warnings:string[],user:string,env:En
  embeds[0]!.color=0x2676dd;
  embeds[0]!.footer={text:checked(fields)?'確認済み':'候補・未判別'};
  embeds[0]!.description=tutorial?
-  '**① アカウント追加画面を開く**\nXアプリの左上プロフィール → アカウント切り替え・追加 →「作成済みのアカウントを使う」→「メールアドレスで続ける」。表記が違う場合は既存アカウントのログイン画面へ。\n\n**② ログイン情報を入力する**\n下のX登録メールアドレスまたはXアカウントIDを、コピー用フォームからコピーして貼り付けます。\n\n**③ Xのパスワードを入力する**\n下のXパスワードをコピーして貼り付けます。\n\n**④ 2FA認証コードを生成する**\n認証コードを求められたら「2FAコードを生成」を押します。生成した6桁のコードをXに入力します。英数字の2FAキーをそのまま入力するわけではありません。\n\n**⑤ ログイン完了**\nホーム画面が表示されたら完了です。':
-  warnings.join('\n')+'\n\n「項目をコピー用フォームで開く」で値を選択・コピーできます。候補・未判別は購入元の情報と照合してください。';
- if(code)embeds[0]!.description+='\n\n**認証コード：'+block(code.code)+'**\n次の更新：<t:'+Math.floor(code.validUntil/1000)+':R>\n期限を過ぎたら「2FAコードを更新」を押してください。';
+  '**① アカウント追加画面を開く**\nXアプリの左上プロフィール → アカウント切り替え・追加 →「作成済みのアカウントを使う」→「メールアドレスで続ける」。表記が違う場合は既存アカウントのログイン画面へ。\n\n**② ログイン情報を入力する**\n下のX登録メールアドレスまたはXアカウントIDを、タップしてコピーし、貼り付けます。\n\n**③ Xのパスワードを入力する**\n下のXパスワードをタップしてコピーし、貼り付けます。\n\n**④ 2FA認証コードを生成する**\n認証コードを求められたら「2FAコードを生成」を押します。生成した6桁のコードをXに入力します。英数字の2FAキーをそのまま入力するわけではありません。\n\n**⑤ ログイン完了**\nホーム画面が表示されたら完了です。':
+  warnings.join('\n')+'\n\nコピーしたい値の表示をタップしてください。候補・未判別は購入元の情報と照合してください。';
+ if(code)embeds[0]!.description+='\n\n**認証コード**\n'+tapValue(code.code)+'\n次の更新：<t:'+Math.floor(code.validUntil/1000)+':R>\n期限を過ぎたら「2FAコードを更新」を押してください。';
  const total=embeds.reduce((n,e)=>n+(e.title?.length??0)+(e.description?.length??0)+(e.footer?.text.length??0)+(e.fields??[]).reduce((s,f)=>s+f.name.length+f.value.length,0),0);
  if(total>6000)throw new Error('RESULT_TOO_LONG');
  const t=await token(embeds,user,env);const components:unknown[]=[];
- const options=fields.map((f,i)=>({label:`${i+1}. ${FIELD_LABELS[f.key]??'未判別'}`,value:String(i)}));
- if(code)options.push({label:'認証コード',value:'code'});
- components.push(row({type:3,custom_id:PREFIX+'copy:'+t,placeholder:'項目をコピー用フォームで開く',options}));
  const buttons=[];
  if(tutorial){if(fields.some(f=>f.key==='totp' && f.value))buttons.push(button(code?'2FAコードを更新':'2FAコードを生成',PREFIX+'totp:'+t,3));}
  else buttons.push(button(checked(fields)?'チュートリアルを表示':'ログイン情報を確認して進む',PREFIX+(checked(fields)?'tutorial:':'confirm:')+t,1));
@@ -134,7 +136,7 @@ export async function handleAccountInteraction(interaction:any,env:Env):Promise<
  try {
   if(interaction.type===3 && id===ACCOUNT_OPEN)return form();
   if(interaction.type===3 && id===PREFIX+'open-tutorial')return form('',true);
-  if(interaction.type===5 && id===PREFIX+'copy-close')return privateMessage('コピー用フォームを閉じました。元の判別結果から続けられます。');
+  if(interaction.type===5 && id===PREFIX+'copy-close')return privateMessage('コピーしたい値の表示をタップしてください。');
   if(interaction.type===5 && [PREFIX+'submit',PREFIX+'submit-tutorial'].includes(id))return {type:4,data:await parseResult(value(interaction,'account'),value(interaction,'format'),value(interaction,'product'),actor(interaction),env,id===PREFIX+'submit-tutorial')};
   if(interaction.type===5 && id===PREFIX+'confirmed') {
    const fields=['email','username','password','totp'].map(k=>({key:k,label:FIELD_LABELS[k]!,value:value(interaction,k),confidence:'format' as const})).filter(f=>f.value);
@@ -152,18 +154,7 @@ export async function handleAccountInteraction(interaction:any,env:Env):Promise<
    return {type:7,data:await result(candidate.fields,['選択したFormat：'+candidate.format,'購入元の形式との一致です。ログインやキーの有効性は未検証です。'],actor(interaction),env,embeds[0]!.title!.includes('チュートリアル') && checked(candidate.fields))};
   }
   const fields=restoreFields(embeds);
-  if(m[1]==='copy') {
-   const choice=String(interaction.data.values?.[0]??'');let text='',label='認証コード';
-   if(choice==='code') {
-    const match=embeds[0]!.description?.match(/\*\*認証コード：```\n(\d{6})\n```\*\*\n次の更新：<t:(\d+):R>/);
-    if(!match || Number(match[2])*1000<=Date.now())return privateMessage('認証コードの期限が切れています。元のチュートリアルで「2FAコードを更新」を押してください。');
-    text=match[1]!;
-   } else {
-    if(!/^\d+$/.test(choice) || !fields[Number(choice)])throw new Error('INVALID_STATE');
-    const field=fields[Number(choice)]!;text=field.value;label=FIELD_LABELS[field.key]!;
-   }
-   return modal(PREFIX+'copy-close','値を選択してコピー', [input('copy',label,text,false,2)]);
-  }
+  if(m[1]==='copy')return privateMessage('値の表示をタップする方式へ変更しました。判別パネルから開き直してください。');
   if(m[1]==='confirm')return confirmation(fields);
   if(!checked(fields))return privateMessage('購入元のログイン情報を確認してから進んでください。');
   const login=fields.filter(f=>['email','username','password','totp'].includes(f.key));

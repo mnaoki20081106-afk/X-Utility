@@ -29,13 +29,13 @@ test('initial panel has two native buttons and both open Discord forms',async()=
   assert.ok(r.data.custom_id.endsWith(button.label==='チュートリアル'?'submit-tutorial':'submit'));
  }
 });
-test('parse, exact-value copy form, tutorial, 2FA update and clear stay private and stateless',async()=>{
+test('parse, tap-copy value display, tutorial, 2FA update and clear stay private and stateless',async()=>{
  const response:any=await handleAccountInteraction(submit('xutil:account:submit',{account:raw,format}),env);
  assert.equal(response.type,4);assert.equal(response.data.flags,64);limits(response.data);
- const copied=await action(response.data,select(response.data).custom_id,['1']);assert.equal(copied.type,9);assert.equal(copied.data.components[0].components[0].value,' Pass908! ');
- const tutorial=await action(response.data,component(response.data,'チュートリアルを表示').custom_id);assert.equal(tutorial.type,7);assert.match(tutorial.data.embeds[0].description,/メールアドレスで続ける/);assert.equal(tutorial.data.embeds[0].fields[2].value,'```\nsample@outlook.com\n```');limits(tutorial.data);
+ assert.equal(response.data.embeds[0].fields[1].value,'**` Pass908! `**');assert.equal(select(response.data),undefined);
+ const tutorial=await action(response.data,component(response.data,'チュートリアルを表示').custom_id);assert.equal(tutorial.type,7);assert.match(tutorial.data.embeds[0].description,/メールアドレスで続ける/);assert.equal(tutorial.data.embeds[0].fields[2].value,'**`sample@outlook.com`**');limits(tutorial.data);
  const code=await action(tutorial.data,component(tutorial.data,'2FAコードを生成').custom_id);assert.equal(code.type,7);assert.match(code.data.embeds[0].description,new RegExp((await generateTotp(secret)).code));assert.match(code.data.embeds[0].description,/<t:\d+:R>/);limits(code.data);
- const copyCode=await action(code.data,select(code.data).custom_id,['code']);assert.equal(copyCode.type,9);assert.equal(copyCode.data.components[0].components[0].value,(await generateTotp(secret)).code);
+ assert.match(code.data.embeds[0].description,new RegExp('\\*\\*`'+(await generateTotp(secret)).code+'`\\*\\*'));assert.equal(select(code.data),undefined);
  const updated=await action(code.data,component(code.data,'2FAコードを更新').custom_id);assert.equal(updated.type,7);limits(updated.data);
  const cleared=await action(updated.data,component(updated.data,'結果を消す').custom_id);assert.deepEqual(cleared.data.embeds,[]);assert.deepEqual(cleared.data.components,[]);
 });
@@ -47,7 +47,7 @@ test('tutorial button proceeds directly after an explicit format and guesses req
  const tutorial:any=await handleAccountInteraction(submit(form.data.custom_id,{email:'sample@outlook.com',username:'sample_user',password:' Pass908! ',totp:secret}),env);assert.equal(tutorial.data.flags,64);assert.equal(tutorial.data.embeds[0].title,'X垢のログイン方法');limits(tutorial.data);
 });
 test('signed message state rejects another user, changes, public messages and expiry',async()=>{
- const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:raw,format}),env);const id=select(r.data).custom_id;
+ const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:raw,format}),env);const id=component(r.data,'チュートリアルを表示').custom_id;
  for(const result of [await action(r.data,id,['1'],{id:'999999999999999999'}),await action({...r.data,embeds:[{...r.data.embeds[0],title:'tampered'}]},id,['1']),await handleAccountInteraction({type:3,user,message:{...r.data,flags:0},data:{custom_id:id,values:['1']}},env)]) {assert.equal((result as any).type,4);assert.equal((result as any).data.flags,64);assert.doesNotMatch((result as any).data.content,/Pass908/);}
  const original=Date.now;try {Date.now=()=>original()+901000;const expired=await action(r.data,id,['1']);assert.equal(expired.type,4);assert.match(expired.data.content,/15分/);}finally {Date.now=original;}
 });
@@ -58,7 +58,7 @@ test('ambiguous formats can be selected within the ephemeral message',async()=>{
 });
 test('long field chunks preserve exact copy content within Discord embed limits',async()=>{
  const password='!'.repeat(3500);const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:`sample_user:${password}`,format:'Login:Password'}),env);assert.equal(r.type,4);limits(r.data);
- const copied=await action(r.data,select(r.data).custom_id,['1']);assert.equal(copied.data.components[0].components[0].value,password);
+ const tutorial=await action(r.data,component(r.data,'チュートリアルを表示').custom_id);assert.equal(tutorial.type,7);assert.equal(tutorial.data.embeds[0].fields.filter((f:any)=>f.name.includes('Xパスワード')).map((f:any)=>f.value.slice(3,-3)).join(''),password);
 });
 test('signed Discord HTTP interactions dispatch to the native account form and private result',async()=>{
  const buildResult=await build({entryPoints:['src/index.ts'],bundle:true,write:false,platform:'node',format:'esm',loader:{'.txt':'text'}});
