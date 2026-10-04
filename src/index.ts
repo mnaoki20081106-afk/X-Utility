@@ -15,6 +15,7 @@ import {
 } from "./search-credential";
 import { generateTotp } from "./totp";
 import { accountPageResponse } from "./account-page";
+import { accountFormatPanelPayload, handleAccountInteraction } from "./account-discord";
 
 type RateLimiterBinding = {
   limit(input: { key: string }): Promise<{ success: boolean }>;
@@ -100,20 +101,6 @@ function totpPanelPayload() {
       }
     ],
     allowed_mentions: { parse: [] }
-  };
-}
-
-function accountFormatPanelPayload(origin: string) {
-  return {
-    embeds: [{
-      title: "X アカウント形式判別",
-      description: "納品された文字列から、ID・パスワード・メール・2FAキーなどを一覧に整理します。\nボタンで判別画面を開き、各項目をタップでコピーできます。\n入力した情報は端末内で処理します。",
-      color: 0x2676dd
-    }],
-    components: [{type: 1, components: [{
-      type: 2, style: 5, label: "形式を判別・コピー", url: origin + "/account-format"
-    }]}],
-    allowed_mentions: {parse: []}
   };
 }
 
@@ -511,6 +498,9 @@ async function handleInteraction(
     return discordInteractionResponse({ type: 1 });
   }
 
+  const accountResponse = await handleAccountInteraction(interaction, env);
+  if (accountResponse) return discordInteractionResponse(accountResponse);
+
   if (interaction.type === 3) {
     const customId = String(interaction?.data?.custom_id ?? "");
     if (customId === SHADOWBAN_BUTTON_ID) {
@@ -818,7 +808,7 @@ async function handleBridge(
         body: JSON.stringify(
           kind === "shadowban"
             ? shadowbanPanelPayload()
-            : kind === "2fa" ? totpPanelPayload() : accountFormatPanelPayload(url.origin)
+            : kind === "2fa" ? totpPanelPayload() : accountFormatPanelPayload()
         )
       }
     );
