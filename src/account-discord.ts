@@ -1,5 +1,5 @@
 import { parseAccount, FIELD_LABELS, type AccountField } from './account-format';
-import { FORMAT_CATALOG, resolveFormatSources } from './format-catalog';
+import { FORMAT_CATALOG } from './format-catalog';
 import { generateTotp } from './totp';
 
 export const ACCOUNT_OPEN = 'xutil:account:open';
@@ -26,11 +26,9 @@ function value(interaction:any,id:string):string {
  return '';
 }
 function actor(interaction:any):string {return String(interaction.member?.user?.id??interaction.user?.id??'');}
-function form(format='',tutorial=false) {
+function form(tutorial=false) {
  return modal(PREFIX+(tutorial?'submit-tutorial':'submit'),'X アカウント形式判別',[
-  input('account','納品文字列（1アカウント分）','',true,2),
-  input('format','購入元のFormat（任意）',format,false,1,500),
-  input('product','商品ID / URL / ショップ名（任意）','',false,1,300)
+  input('account','納品文字列（1アカウント分）','',true,2)
  ]);
 }
 export function accountFormatPanelPayload() {
@@ -97,7 +95,7 @@ async function result(fields:AccountField[],warnings:string[],user:string,env:En
  embeds[0]!.footer={text:checked(fields)?'確認済み':'候補・未判別'};
  embeds[0]!.description=tutorial?
   '**① アカウント追加画面を開く**\nXアプリの左上プロフィール → アカウント切り替え・追加 →「作成済みのアカウントを使う」→「メールアドレスで続ける」。表記が違う場合は既存アカウントのログイン画面へ。\n\n**② ログイン情報を入力する**\n下のX登録メールアドレスまたはXアカウントIDを、タップしてコピーし、貼り付けます。\n\n**③ Xのパスワードを入力する**\n下のXパスワードをタップしてコピーし、貼り付けます。\n\n**④ 2FA認証コードを生成する**\n認証コードを求められたら「2FAコードを生成」を押します。生成した6桁のコードをXに入力します。英数字の2FAキーをそのまま入力するわけではありません。\n\n**⑤ ログイン完了**\nホーム画面が表示されたら完了です。':
-  warnings.join('\n')+'\n\nコピーしたい値の表示をタップしてください。候補・未判別は購入元の情報と照合してください。';
+  warnings.join('\n')+'\n\nコピーしたい値の表示をタップしてください。候補・未判別の項目は自動では確定できません。';
  if(code)embeds[0]!.description+='\n\n**認証コード**\n'+tapValue(code.code)+'\n次の更新：<t:'+Math.floor(code.validUntil/1000)+':R>\n期限を過ぎたら「2FAコードを更新」を押してください。';
  const total=embeds.reduce((n,e)=>n+(e.title?.length??0)+(e.description?.length??0)+(e.footer?.text.length??0)+(e.fields??[]).reduce((s,f)=>s+f.name.length+f.value.length,0),0);
  if(total>6000)throw new Error('RESULT_TOO_LONG');
@@ -105,38 +103,34 @@ async function result(fields:AccountField[],warnings:string[],user:string,env:En
  const buttons=[];
  if(tutorial){if(fields.some(f=>f.key==='totp' && f.value))buttons.push(button(code?'2FAコードを更新':'2FAコードを生成',PREFIX+'totp:'+t,3));}
  else buttons.push(button(checked(fields)?'チュートリアルを表示':'ログイン情報を確認して進む',PREFIX+(checked(fields)?'tutorial:':'confirm:')+t,1));
- buttons.push(button('別の文字列 / Formatで判別',ACCOUNT_OPEN));
+ buttons.push(button('別の文字列を判別',ACCOUNT_OPEN));
  buttons.push(button('結果を消す',PREFIX+'clear:'+t));
  components.push(row(...buttons));
  return {flags:64,embeds,components,allowed_mentions:{parse:[]}};
 }
-async function parseResult(raw:string,format:string,product:string,user:string,env:Env,tutorial=false) {
- const selected=resolveFormatSources(product);
- const parsed=parseAccount(raw,selected,{format:format.trim()||undefined});
- if(parsed.candidates.length>1) {
-  const embeds:Embed[]=[{title:tutorial?'チュートリアル用の形式を選択してください':'購入元の形式を選択してください',description:block(raw),footer:{text:product.trim()||'全商品'},color:0x2676dd}];
-  if(embeds[0]!.description!.length>4096)throw new Error('RESULT_TOO_LONG');
-  const t=await token(embeds,user,env);
-  return {flags:64,embeds,components:[row({type:3,custom_id:PREFIX+'candidate:'+t,placeholder:'購入元の商品説明に一致する形式を選択',options:parsed.candidates.slice(0,25).map((c,i)=>({label:c.format.slice(0,100),description:(c.sources.map(id=>FORMAT_CATALOG.find(s=>s.id===id)?.seller??id).join(' / ')||'手入力形式').slice(0,100),value:String(i)}))}),row(button('Formatを入力して判別',ACCOUNT_OPEN),button('結果を消す',PREFIX+'clear:'+t))],allowed_mentions:{parse:[]}};
- }
- return result(parsed.fields,parsed.warnings,user,env,tutorial && checked(parsed.fields));
+async function parseResult(raw:string,user:string,env:Env,tutorial=false) {
+ const parsed=parseAccount(raw,FORMAT_CATALOG);
+ const warnings=parsed.warnings.filter(w=>!w.includes('購入元') && !w.includes('Format'));
+ if(parsed.candidates.length>1)warnings.unshift('複数の項目の並びに一致したため、確定できない項目は候補として表示しています。');
+ if(!parsed.candidates.length)warnings.unshift('項目の並びを確定できなかったため、値の形から読み取れる項目を候補として表示しています。');
+ return result(parsed.fields,warnings,user,env,tutorial && checked(parsed.fields));
 }
 function confirmation(fields:AccountField[]) {
  const unique=(key:string)=>{const values=fields.filter(f=>f.key===key && f.value);return values.length===1?values[0]!.value:'';};
- return modal(PREFIX+'confirmed','購入元のログイン情報を確認',[
-  input('email','X登録メールアドレス（購入元で確認）',unique('email')),
-  input('username','Xユーザー名（購入元で確認）',unique('username')),
-  input('password','Xパスワード（購入元で確認）',unique('password')),
-  input('totp','Xの2FAキー（購入元で確認）',unique('totp'))
+ return modal(PREFIX+'confirmed','ログイン情報を確認',[
+  input('email','X登録メールアドレス',unique('email')),
+  input('username','Xユーザー名',unique('username')),
+  input('password','Xパスワード',unique('password')),
+  input('totp','Xの2FAキー',unique('totp'))
  ]);
 }
 export async function handleAccountInteraction(interaction:any,env:Env):Promise<Record<string,unknown>|null> {
  const id=String(interaction.data?.custom_id??'');if(!id.startsWith(PREFIX))return null;
  try {
   if(interaction.type===3 && id===ACCOUNT_OPEN)return form();
-  if(interaction.type===3 && id===PREFIX+'open-tutorial')return form('',true);
+  if(interaction.type===3 && id===PREFIX+'open-tutorial')return form(true);
   if(interaction.type===5 && id===PREFIX+'copy-close')return privateMessage('コピーしたい値の表示をタップしてください。');
-  if(interaction.type===5 && [PREFIX+'submit',PREFIX+'submit-tutorial'].includes(id))return {type:4,data:await parseResult(value(interaction,'account'),value(interaction,'format'),value(interaction,'product'),actor(interaction),env,id===PREFIX+'submit-tutorial')};
+  if(interaction.type===5 && [PREFIX+'submit',PREFIX+'submit-tutorial'].includes(id))return {type:4,data:await parseResult(value(interaction,'account'),actor(interaction),env,id===PREFIX+'submit-tutorial')};
   if(interaction.type===5 && id===PREFIX+'confirmed') {
    const fields=['email','username','password','totp'].map(k=>({key:k,label:FIELD_LABELS[k]!,value:value(interaction,k),confidence:'format' as const})).filter(f=>f.value);
    if(!fields.some(f=>['email','username'].includes(f.key)) || !fields.some(f=>f.key==='password'))return privateMessage('X登録メールアドレスまたはユーザー名と、Xパスワードを確認してください。');
@@ -146,16 +140,11 @@ export async function handleAccountInteraction(interaction:any,env:Env):Promise<
   const m=id.match(/^xutil:account:(copy|candidate|tutorial|confirm|totp|clear):(.+)$/);if(!m)return privateMessage('判別パネルから入力し直してください。');
   const embeds=await verify(interaction,m[2]!,env);
   if(m[1]==='clear')return {type:7,data:{content:'結果を消しました。',embeds:[],components:[],allowed_mentions:{parse:[]}}};
-  if(m[1]==='candidate') {
-   const raw=unblock(embeds[0]!.description!);const parsed=parseAccount(raw,resolveFormatSources(embeds[0]!.footer?.text==='全商品'?'':embeds[0]!.footer?.text??''));
-   const selected=String(interaction.data.values?.[0]??'');if(!/^\d+$/.test(selected))throw new Error('INVALID_STATE');
-   const candidate=parsed.candidates[Number(selected)];if(!candidate)throw new Error('INVALID_STATE');
-   return {type:7,data:await result(candidate.fields,['選択したFormat：'+candidate.format,'購入元の形式との一致です。ログインやキーの有効性は未検証です。'],actor(interaction),env,embeds[0]!.title!.includes('チュートリアル') && checked(candidate.fields))};
-  }
+  if(m[1]==='candidate')return privateMessage('納品文字列だけで判別する方式に更新しました。最初のパネルから入力し直してください。');
   const fields=restoreFields(embeds);
   if(m[1]==='copy')return privateMessage('値の表示をタップする方式へ変更しました。判別パネルから開き直してください。');
   if(m[1]==='confirm')return confirmation(fields);
-  if(!checked(fields))return privateMessage('購入元のログイン情報を確認してから進んでください。');
+  if(!checked(fields))return privateMessage('ログイン情報を確認してから進んでください。');
   const login=fields.filter(f=>['email','username','password','totp'].includes(f.key));
   if(m[1]==='tutorial')return {type:7,data:await result(login,[],actor(interaction),env,true)};
   if(m[1]==='totp') {

@@ -8,7 +8,6 @@ const env={XUTILITY_BRIDGE_SECRET:'fixture-bridge-secret-at-least-32-characters'
 const user={id:'123456789012345678'};
 const secret='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
 const raw=`sample_user: Pass908! :sample@outlook.com:Mail908!:${secret}:${'a'.repeat(40)}`;
-const format='Login:Password:Email:MailPass:2FA:Token';
 function submit(id:string,values:Record<string,string>) {return {type:5,user,data:{custom_id:id,components:Object.entries(values).map(([custom_id,value])=>({type:1,components:[{type:4,custom_id,value}]}))}};}
 function component(data:any,label:string) {return data.components.flatMap((r:any)=>r.components).find((c:any)=>c.label===label);}
 function select(data:any) {return data.components.flatMap((r:any)=>r.components).find((c:any)=>c.type===3);}
@@ -25,12 +24,12 @@ test('initial panel has two native buttons and both open Discord forms',async()=
  assert.deepEqual(panel.components[0]!.components.map((c:any)=>c.label),['形式判別','チュートリアル']);
  for(const button of panel.components[0]!.components as any[]) {
   const r:any=await handleAccountInteraction({type:3,user,data:{custom_id:button.custom_id}},env);
-  assert.equal(r.type,9);assert.equal(r.data.components[0].components[0].custom_id,'account');
+  assert.equal(r.type,9);assert.equal(r.data.components.length,1);assert.equal(r.data.components[0].components[0].custom_id,'account');
   assert.ok(r.data.custom_id.endsWith(button.label==='チュートリアル'?'submit-tutorial':'submit'));
  }
 });
 test('parse, tap-copy value display, tutorial, 2FA update and clear stay private and stateless',async()=>{
- const response:any=await handleAccountInteraction(submit('xutil:account:submit',{account:raw,format}),env);
+ const response:any=await handleAccountInteraction(submit('xutil:account:submit',{account:raw}),env);
  assert.equal(response.type,4);assert.equal(response.data.flags,64);limits(response.data);
  assert.equal(response.data.embeds[0].fields[1].value,'**` Pass908! `**');assert.equal(select(response.data),undefined);
  const tutorial=await action(response.data,component(response.data,'チュートリアルを表示').custom_id);assert.equal(tutorial.type,7);assert.match(tutorial.data.embeds[0].description,/メールアドレスで続ける/);assert.equal(tutorial.data.embeds[0].fields[2].value,'**`sample@outlook.com`**');limits(tutorial.data);
@@ -39,25 +38,27 @@ test('parse, tap-copy value display, tutorial, 2FA update and clear stay private
  const updated=await action(code.data,component(code.data,'2FAコードを更新').custom_id);assert.equal(updated.type,7);limits(updated.data);
  const cleared=await action(updated.data,component(updated.data,'結果を消す').custom_id);assert.deepEqual(cleared.data.embeds,[]);assert.deepEqual(cleared.data.components,[]);
 });
-test('tutorial button proceeds directly after an explicit format and guesses require an info form',async()=>{
- const direct:any=await handleAccountInteraction(submit('xutil:account:submit-tutorial',{account:raw,format}),env);assert.equal(direct.data.embeds[0].title,'X垢のログイン方法');
- const guessed:any=await handleAccountInteraction(submit('xutil:account:submit',{account:'sample_user: Pass908! :sample@outlook.com',product:'2217'}),env);
+test('tutorial button proceeds directly after automatic detection and guesses require an info form',async()=>{
+ const direct:any=await handleAccountInteraction(submit('xutil:account:submit-tutorial',{account:raw}),env);assert.equal(direct.data.embeds[0].title,'X垢のログイン方法');
+ const guessed:any=await handleAccountInteraction(submit('xutil:account:submit',{account:`sample_user:Pass908!:sample@outlook.com:${'c'.repeat(40)}:${'a'.repeat(40)}`}),env);
  const confirm=component(guessed.data,'ログイン情報を確認して進む');assert.ok(confirm);
  const form=await action(guessed.data,confirm.custom_id);assert.equal(form.type,9);
  const tutorial:any=await handleAccountInteraction(submit(form.data.custom_id,{email:'sample@outlook.com',username:'sample_user',password:' Pass908! ',totp:secret}),env);assert.equal(tutorial.data.flags,64);assert.equal(tutorial.data.embeds[0].title,'X垢のログイン方法');limits(tutorial.data);
 });
 test('signed message state rejects another user, changes, public messages and expiry',async()=>{
- const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:raw,format}),env);const id=component(r.data,'チュートリアルを表示').custom_id;
+ const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:raw}),env);const id=component(r.data,'チュートリアルを表示').custom_id;
  for(const result of [await action(r.data,id,['1'],{id:'999999999999999999'}),await action({...r.data,embeds:[{...r.data.embeds[0],title:'tampered'}]},id,['1']),await handleAccountInteraction({type:3,user,message:{...r.data,flags:0},data:{custom_id:id,values:['1']}},env)]) {assert.equal((result as any).type,4);assert.equal((result as any).data.flags,64);assert.doesNotMatch((result as any).data.content,/Pass908/);}
  const original=Date.now;try {Date.now=()=>original()+901000;const expired=await action(r.data,id,['1']);assert.equal(expired.type,4);assert.match(expired.data.content,/15分/);}finally {Date.now=original;}
 });
-test('ambiguous formats can be selected within the ephemeral message',async()=>{
- const response:any=await handleAccountInteraction(submit('xutil:account:submit-tutorial',{account:`sample_user:Pass908!:sample@outlook.com:${'c'.repeat(40)}:${'a'.repeat(40)}`}),env);assert.match(response.data.embeds[0].title,/形式を選択/);limits(response.data);
- const picked=await action(response.data,select(response.data).custom_id,['0']);assert.equal(picked.type,7);limits(picked.data);
- assert.equal(picked.data.embeds[0].title,'X垢のログイン方法');
+test('ambiguous deliveries show copyable candidates without asking buyers for supplier formats',async()=>{
+ const response:any=await handleAccountInteraction(submit('xutil:account:submit-tutorial',{account:`sample_user:Pass908!:sample@outlook.com:${'c'.repeat(40)}:${'a'.repeat(40)}`}),env);
+ limits(response.data);assert.equal(select(response.data),undefined);
+ assert.ok(component(response.data,'ログイン情報を確認して進む'));
+ assert.doesNotMatch(JSON.stringify(response.data),/Format|購入元|ショップ|商品ID/);
+ assert.ok(response.data.embeds[0].fields.some((f:any)=>f.value==='**`Pass908!`**'));
 });
 test('long field chunks preserve exact copy content within Discord embed limits',async()=>{
- const password='!'.repeat(3500);const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:`sample_user:${password}`,format:'Login:Password'}),env);assert.equal(r.type,4);limits(r.data);
+ const password='!'.repeat(3500);const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:`sample_user:${password}`}),env);assert.equal(r.type,4);limits(r.data);
  const tutorial=await action(r.data,component(r.data,'チュートリアルを表示').custom_id);assert.equal(tutorial.type,7);assert.equal(tutorial.data.embeds[0].fields.filter((f:any)=>f.name.includes('Xパスワード')).map((f:any)=>f.value.slice(3,-3)).join(''),password);
 });
 test('signed Discord HTTP interactions dispatch to the native account form and private result',async()=>{
@@ -73,11 +74,11 @@ test('signed Discord HTTP interactions dispatch to the native account form and p
   assert.equal(response.status,200);return response.json();
  }
  const form=await request({type:3,user,data:{custom_id:'xutil:account:open-tutorial'}});assert.equal(form.type,9);
- const result=await request(submit(form.data.custom_id,{account:raw,format}));assert.equal(result.type,4);assert.equal(result.data.flags,64);assert.equal(result.data.embeds[0].title,'X垢のログイン方法');
+ const result=await request(submit(form.data.custom_id,{account:raw}));assert.equal(result.type,4);assert.equal(result.data.flags,64);assert.equal(result.data.embeds[0].title,'X垢のログイン方法');
 });
-test('hStockPlus Japanese product URL uses the exact original mixed separators',async()=>{
+test('hStockPlus mixed separators are detected from the delivery alone',async()=>{
  const delivered=`sample_user--- Pass908! ----sample@outlook.com----Mail908!---Refresh123----12345678-1234-1234-1234-123456789abc----${secret}----${'a'.repeat(40)}`;
- const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:delivered,product:'https://hstockplus.com/ja/products/6aaef856dbc83945af55f0e1?source=test'}),env);
+ const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:delivered}),env);
  assert.equal(r.type,4);assert.equal(r.data.flags,64);limits(r.data);
  assert.ok(r.data.embeds.flatMap((e:any)=>e.fields??[]).some((f:any)=>f.name.includes('Xパスワード')&&f.value==='**` Pass908! `**'));
  const tutorial=await action(r.data,component(r.data,'チュートリアルを表示').custom_id);assert.equal(tutorial.type,7);assert.equal(tutorial.data.embeds[0].title,'X垢のログイン方法');
