@@ -1,5 +1,5 @@
 export type AccountField = { key: string; label: string; value: string; confidence: "format" | "candidate" | "unknown" };
-export type FormatSource = { id: string; title: string; seller: string; url: string; formats: string[]; declarations: string[] };
+export type FormatSource = { id: string; title: string; seller: string; url: string; formats: string[]; declarations: string[]; aliases?: string[] };
 export type FormatCandidate = { format: string; sources: string[]; fields: AccountField[] };
 export type ParsedAccount = { candidates: FormatCandidate[]; fields: AccountField[]; warnings: string[]; separators: string[] };
 
@@ -9,38 +9,38 @@ export const FIELD_LABELS: Record<string, string> = {
   phone: "電話番号", totp: "2FAキー", authToken: "auth_token", ct0: "ct0",
   refreshToken: "メールRefresh Token", clientId: "メールClient ID", cookies: "Cookies",
   followers: "フォロワー数", tweets: "投稿数", year: "登録年", premiumDue: "Premium期限",
-  emailToken: "メールトークン", emailTotp: "メール2FAキー", verificationUrl: "認証用URL", backupCode: "2FAバックアップコード", unknown: "未判別"
+  emailToken: "メールトークン", emailTotp: "メール2FAキー", verificationUrl: "認証用URL", backupCode: "2FAバックアップコード", twoFactorId: "ID_2FA_code（原文項目）", additionalEmail: "追加メール", profileUrl: "プロフィールURL", deviceToken: "Device Token", data: "Data", device: "デバイス情報", secretToken: "Secret Token", emailAccessInfo: "メールアクセス情報", oauthToken: "OAuth Token", oauthSecret: "OAuth Token Secret", oauth2: "メールOAuth2", registrationDate: "登録日時", country: "国・地域", avatar: "アバター", userAgent: "User Agent", unknown: "未判別"
 };
 
 export function templateFields(template: string): { keys: string[]; separators: string[]; trailingSeparator?: string } {
-  const parts = template.normalize("NFKC").trim().replace(/two-factor authentication/gi,"2FA").split(/(-{1,}|::|:|\||;|\t|\.|,)/);
+  const parts = template.normalize("NFKC").trim().replace(/two-factor authentication/gi,"2FA").replace(/reg\.date/gi,"RegistrationDate").replace(/dp\.mail/gi,"AdditionalEmail").replace(/2-FA/gi,"2FA").split(/(-{1,}|—|–|::|:|\||;|\t|\.|,)/);
   const trailingSeparator=parts[parts.length-1] === "" ? parts.splice(-2)[0] : undefined;
   if (parts.length < 3 || parts.length > 49 || parts.some(p => !p.trim())) {
     throw new Error("Formatは Login:Password:Email:2FA:Token のように入力してください");
   }
   const keys: string[] = [], separators: string[] = [];
   const aliases: Record<string, string> = {
-    login:"username",username:"username",user:"username",id:"username",account:"username",
+    login:"username",log:"username",xusername:"username",profile:"username","2fadirectkey":"totp",logintwitter:"username",twitterlogin:"username",pastwitter:"password",tokentwitter:"authToken",mailtwitter:"email",pasmailtwitter:"emailPassword",tokenmail:"emailToken",twittermail:"email",profilelink:"profileUrl",link:"profileUrl",ct0token:"ct0",cookiesjson:"cookies",subscriptions:"followers",data:"data",follownumber:"followers",devicetoken:"deviceToken","2fakeylink":"totp",linkto2fakey:"totp",loginemail:"email",emailforlogin:"email",passemail:"emailPassword",fake:"unknown",device:"device",secrettoken:"secretToken",username:"username",user:"username",id:"username",account:"username",
     password:"password",pass:"password",pwd:"password",twitterpassword:"password",xpassword:"password",
-    email:"email",mail:"email",loginmail:"email",emailaddress:"email",emailusername:"email",
+    email:"email",mail:"email",loginmail:"email",emailaddress:"email",emailusername:"email",mailusername:"email",
     emailpassword:"emailPassword",mailpassword:"emailPassword",mailpass:"emailPassword",passmail:"emailPassword",emailpass:"emailPassword",
     emailrecovery:"recoveryEmail",recoveryemail:"recoveryEmail",backupemail:"recoveryEmail",
     attachpassword:"recoveryPassword",recoverypassword:"recoveryPassword",
     phone:"phone",phonenumber:"phone",number:"phone",
-    "2fa":"totp",twofactorauthentication:"totp",twofactor:"totp",totp:"totp",secret:"totp",key2fa:"totp","2fasecret":"totp","2fakey":"totp",twofactorverification:"totp","2famail":"emailTotp",
+    "2fa":"totp",twofactorauthentication:"totp",twofactor:"totp",totp:"totp",secret:"totp",key2fa:"totp","2fasecret":"totp","2facode":"totp","2fakey":"totp",twofactorverification:"totp","2famail":"emailTotp",
     token:"authToken",authtoken:"authToken",auth:"authToken",aoutoken:"authToken",verificationtoken:"authToken",accesstoken:"authToken",
     ct0:"ct0",cto:"ct0",refreshtoken:"refreshToken",clientid:"clientId",clientld:"clientId",
     cookies:"cookies",cookie:"cookies",followers:"followers",counts:"followers",subs:"followers",tweet:"tweets",tweets:"tweets",
     year:"year",premiumduedate:"premiumDue",tempmailtoken:"emailToken",emailtoken:"emailToken",
-    verificationurl:"verificationUrl",firstmail:"verificationUrl",additionalpassword:"recoveryPassword",backupcode:"backupCode",unknown:"unknown"
+    verificationurl:"verificationUrl",firstmail:"verificationUrl",additionalpassword:"recoveryPassword",backupcode:"backupCode",twitteremail:"email",twitterusername:"username",twitter2fa:"totp","2fakeyofemail":"emailTotp",passwordmail:"emailPassword",tweetcount:"tweets",followercount:"followers",emaillogin:"email",emailaccessinfo:"emailAccessInfo",authorizationtoken:"authToken",tokenauthorization:"authToken",authenticationtoken:"authToken",id2facode:"twoFactorId",authorization:"authToken",emailid:"clientId",yearcreated:"year",passwordpost:"emailPassword",passwordemail:"emailPassword",appid:"clientId",verificationemail:"email",secondaryemail:"recoveryEmail",secondaryemailpassword:"recoveryPassword",backupemailpassword:"recoveryPassword",tinyhostemail:"email",hotmail:"email",additionalemail:"additionalEmail",邮箱密码:"emailPassword",邮箱令牌:"emailToken",邮箱客户端:"clientId",jsoncookies:"cookies","2fasecretcode":"totp",none:"unknown",uid:"clientId",posts:"tweets",registrationcountry:"country",oauthtoken:"oauthToken",authtokensecret:"oauthSecret",oauthtokensecret:"oauthSecret",accesstokensecret:"oauthSecret","accesstoken(userid+token":"oauthToken",oauth2:"oauth2",registrationdate:"registrationDate",regdate:"registrationDate",country:"country",avatar:"avatar",useragent:"userAgent",clientuid:"clientId",unknown:"unknown"
   };
   for (let i=0;i<parts.length;i++) {
     if (i%2) { separators.push(parts[i]!); continue; }
     const label=parts[i]!.trim().replace(/^\(|\)$/g,"");
-    const normalized=label.toLowerCase().replace(/[\s_\-]+/g,"");
+    const normalized=label.toLowerCase().replace(/[\s_\-\u200b-\u200d\ufeff]+/g,"");
     let key=aliases[normalized];
     if (!key) throw new Error("Formatに未対応の項目名があります。項目名を確認してください");
-    if (key==="password" && keys.includes("email")) key="emailPassword";
+    if (key==="password" && !["twitterpassword","xpassword"].includes(normalized) && keys.includes("email")) key="emailPassword";
     keys.push(key);
   }
   return {keys,separators,trailingSeparator};
@@ -50,7 +50,7 @@ function validField(key: string, value: string): boolean {
   if (!value) return true; // Delivery exports may contain empty/absent fields; keep their positions.
   switch (key) {
     case "username": return /^@?[A-Za-z0-9_]{1,15}$/.test(value);
-    case "email": case "recoveryEmail": return /^[^\s@:|;]+@[^\s@:|;]+\.[^\s@:|;]+$/.test(value);
+    case "email": case "recoveryEmail": case "additionalEmail": return /^[^\s@:|;]+@[^\s@:|;]+\.[^\s@:|;]+$/.test(value);
     case "authToken": return /^[a-fA-F0-9]{40}$/.test(value);
     case "ct0": return /^[a-fA-F0-9]{32,256}$/.test(value);
     case "emailTotp": case "totp": return /^(?:[A-Z2-7][A-Z2-7\s-]{14,126}[A-Z2-7]=*|otpauth:\/\/[^\s]+|https:\/\/[^\s]+)$/i.test(value);
@@ -58,7 +58,9 @@ function validField(key: string, value: string): boolean {
     case "year": return /^(?:19|20)\d{2}$/.test(value);
     case "followers": case "tweets": return /^\d+$/.test(value);
     case "clientId": return /^[\da-fA-F]{8}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{12}$/.test(value) || /^[\da-zA-Z_-]{16,64}$/.test(value);
-    case "verificationUrl": return /^https?:\/\//.test(value);
+    case "profileUrl": case "verificationUrl": return /^https?:\/\//.test(value);
+    case "cookies": return /^[\[{]/.test(value) || /(?:^|[;\s])(?:auth_token|ct0)=/.test(value) || value.includes("\t");
+    case "userAgent": return /^(?:Mozilla\/|Opera\/|Dalvik\/|Twitter\/)/i.test(value);
     default:return true;
   }
 }
@@ -72,8 +74,8 @@ export function matchFormat(raw: string, format: string): AccountField[] | null 
     if (!validField(key,value)) return false;
     const embedded=separators.filter(s=>value.includes(s));
     if (!embedded.length) return true;
-    if (["cookies","verificationUrl","totp","emailToken","refreshToken","emailTotp"].includes(key))return true;
-    if (["email","recoveryEmail"].includes(key) && embedded.every(s=>s==="." || s==="-"))return true;
+    if (["cookies","profileUrl","verificationUrl","totp","emailToken","refreshToken","emailTotp"].includes(key))return true;
+    if (["email","recoveryEmail","additionalEmail"].includes(key) && embedded.every(s=>s==="." || s==="-"))return true;
     if (["phone","clientId"].includes(key) && embedded.every(s=>s==="-"))return true;
     return false;
   }
@@ -90,7 +92,7 @@ export function matchFormat(raw: string, format: string): AccountField[] | null 
     const separator=separators[index]!;
     let pos=raw.indexOf(separator,offset);
     while(pos!==-1 && budget>=0 && interpretations.length<=1) {
-      add(raw.slice(offset,pos),pos+separator.length);
+      if (!/^-+$/.test(separator) || (raw[pos-1]!=="-" && raw[pos+separator.length]!=="-")) add(raw.slice(offset,pos),pos+separator.length);
       pos=raw.indexOf(separator,pos+separator.length);
     }
   }
@@ -103,7 +105,7 @@ export function parseAccount(raw: string, catalog: FormatSource[], options: { pr
   raw=raw.replace(/\r?\n$/g,"");
   if (!raw || raw.length>4000 || /[\r\n]/.test(raw)) throw new Error("1アカウント分の納品文字列を入力してください（最大4,000文字）");
   const warnings: string[]=[], candidates: FormatCandidate[]=[];
-  const separators=[...new Set(raw.match(/-{2,}|::|:|\||;|\t/g)??[])];
+  const separators=[...new Set(raw.match(/-{2,}|—|–|::|:|\||;|\t/g)??[])];
   const selected=options.productId?catalog.filter(s=>s.id===options.productId):catalog;
   if (options.productId && !selected.length) throw new Error("購入元の商品が見つかりません");
   const byFormat=new Map<string,string[]>();

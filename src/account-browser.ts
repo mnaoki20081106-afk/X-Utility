@@ -1,6 +1,6 @@
 import { LoginTutorial } from "./login-tutorial";
 import { parseAccount, FIELD_LABELS, type AccountField, type ParsedAccount } from "./account-format";
-import { FORMAT_CATALOG, FORMAT_COVERAGE } from "./generated/hstora-formats";
+import { FORMAT_CATALOG, FORMAT_COVERAGE } from "./format-catalog";
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const account=el<HTMLTextAreaElement>("account"), product=el<HTMLSelectElement>("product");
@@ -14,7 +14,7 @@ function productOptions(filter="") {
   product.replaceChildren(new Option("自動判別", ""));
   const query=filter.trim().toLowerCase();
   for (const source of FORMAT_CATALOG) {
-    if (!query || [source.id,source.title,source.seller,source.url].some(v=>v.toLowerCase().includes(query))) {
+    if (!query || [source.id,...(source.aliases??[]),source.title,source.seller,source.url].some(v=>v.toLowerCase().includes(query))) {
       product.add(new Option(source.seller+" / #"+source.id+" / "+source.title,source.id));
     }
   }

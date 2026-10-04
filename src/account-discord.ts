@@ -1,5 +1,5 @@
 import { parseAccount, FIELD_LABELS, type AccountField } from './account-format';
-import { FORMAT_CATALOG } from './generated/hstora-formats';
+import { FORMAT_CATALOG, resolveFormatSources } from './format-catalog';
 import { generateTotp } from './totp';
 
 export const ACCOUNT_OPEN = 'xutil:account:open';
@@ -30,7 +30,7 @@ function form(format='',tutorial=false) {
  return modal(PREFIX+(tutorial?'submit-tutorial':'submit'),'X アカウント形式判別',[
   input('account','納品文字列（1アカウント分）','',true,2),
   input('format','購入元のFormat（任意）',format,false,1,500),
-  input('product','購入元の商品ID / URL（任意）','',false,1,300)
+  input('product','商品ID / URL / ショップ名（任意）','',false,1,300)
  ]);
 }
 export function accountFormatPanelPayload() {
@@ -111,11 +111,10 @@ async function result(fields:AccountField[],warnings:string[],user:string,env:En
  return {flags:64,embeds,components,allowed_mentions:{parse:[]}};
 }
 async function parseResult(raw:string,format:string,product:string,user:string,env:Env,tutorial=false) {
- const productId=product?FORMAT_CATALOG.find(s=>s.id===product.trim() || s.url===product.trim())?.id:undefined;
- if(product && !productId)throw new Error('購入元の商品IDまたはURLを確認してください。');
- const parsed=parseAccount(raw,FORMAT_CATALOG,{format:format.trim()||undefined,productId});
+ const selected=resolveFormatSources(product);
+ const parsed=parseAccount(raw,selected,{format:format.trim()||undefined});
  if(parsed.candidates.length>1) {
-  const embeds:Embed[]=[{title:tutorial?'チュートリアル用の形式を選択してください':'購入元の形式を選択してください',description:block(raw),footer:{text:productId??'全商品'},color:0x2676dd}];
+  const embeds:Embed[]=[{title:tutorial?'チュートリアル用の形式を選択してください':'購入元の形式を選択してください',description:block(raw),footer:{text:product.trim()||'全商品'},color:0x2676dd}];
   if(embeds[0]!.description!.length>4096)throw new Error('RESULT_TOO_LONG');
   const t=await token(embeds,user,env);
   return {flags:64,embeds,components:[row({type:3,custom_id:PREFIX+'candidate:'+t,placeholder:'購入元の商品説明に一致する形式を選択',options:parsed.candidates.slice(0,25).map((c,i)=>({label:c.format.slice(0,100),description:(c.sources.map(id=>FORMAT_CATALOG.find(s=>s.id===id)?.seller??id).join(' / ')||'手入力形式').slice(0,100),value:String(i)}))}),row(button('Formatを入力して判別',ACCOUNT_OPEN),button('結果を消す',PREFIX+'clear:'+t))],allowed_mentions:{parse:[]}};
@@ -148,7 +147,7 @@ export async function handleAccountInteraction(interaction:any,env:Env):Promise<
   const embeds=await verify(interaction,m[2]!,env);
   if(m[1]==='clear')return {type:7,data:{content:'結果を消しました。',embeds:[],components:[],allowed_mentions:{parse:[]}}};
   if(m[1]==='candidate') {
-   const raw=unblock(embeds[0]!.description!);const parsed=parseAccount(raw,FORMAT_CATALOG,{productId:embeds[0]!.footer?.text==='全商品'?undefined:embeds[0]!.footer?.text});
+   const raw=unblock(embeds[0]!.description!);const parsed=parseAccount(raw,resolveFormatSources(embeds[0]!.footer?.text==='全商品'?'':embeds[0]!.footer?.text??''));
    const selected=String(interaction.data.values?.[0]??'');if(!/^\d+$/.test(selected))throw new Error('INVALID_STATE');
    const candidate=parsed.candidates[Number(selected)];if(!candidate)throw new Error('INVALID_STATE');
    return {type:7,data:await result(candidate.fields,['選択したFormat：'+candidate.format,'購入元の形式との一致です。ログインやキーの有効性は未検証です。'],actor(interaction),env,embeds[0]!.title!.includes('チュートリアル') && checked(candidate.fields))};

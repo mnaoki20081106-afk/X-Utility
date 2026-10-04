@@ -41,7 +41,7 @@ test('parse, tap-copy value display, tutorial, 2FA update and clear stay private
 });
 test('tutorial button proceeds directly after an explicit format and guesses require an info form',async()=>{
  const direct:any=await handleAccountInteraction(submit('xutil:account:submit-tutorial',{account:raw,format}),env);assert.equal(direct.data.embeds[0].title,'X垢のログイン方法');
- const guessed:any=await handleAccountInteraction(submit('xutil:account:submit',{account:'sample_user: Pass908! :sample@outlook.com'}),env);
+ const guessed:any=await handleAccountInteraction(submit('xutil:account:submit',{account:'sample_user: Pass908! :sample@outlook.com',product:'2217'}),env);
  const confirm=component(guessed.data,'ログイン情報を確認して進む');assert.ok(confirm);
  const form=await action(guessed.data,confirm.custom_id);assert.equal(form.type,9);
  const tutorial:any=await handleAccountInteraction(submit(form.data.custom_id,{email:'sample@outlook.com',username:'sample_user',password:' Pass908! ',totp:secret}),env);assert.equal(tutorial.data.flags,64);assert.equal(tutorial.data.embeds[0].title,'X垢のログイン方法');limits(tutorial.data);
@@ -74,4 +74,11 @@ test('signed Discord HTTP interactions dispatch to the native account form and p
  }
  const form=await request({type:3,user,data:{custom_id:'xutil:account:open-tutorial'}});assert.equal(form.type,9);
  const result=await request(submit(form.data.custom_id,{account:raw,format}));assert.equal(result.type,4);assert.equal(result.data.flags,64);assert.equal(result.data.embeds[0].title,'X垢のログイン方法');
+});
+test('hStockPlus Japanese product URL uses the exact original mixed separators',async()=>{
+ const delivered=`sample_user--- Pass908! ----sample@outlook.com----Mail908!---Refresh123----12345678-1234-1234-1234-123456789abc----${secret}----${'a'.repeat(40)}`;
+ const r:any=await handleAccountInteraction(submit('xutil:account:submit',{account:delivered,product:'https://hstockplus.com/ja/products/6aaef856dbc83945af55f0e1?source=test'}),env);
+ assert.equal(r.type,4);assert.equal(r.data.flags,64);limits(r.data);
+ assert.ok(r.data.embeds.flatMap((e:any)=>e.fields??[]).some((f:any)=>f.name.includes('Xパスワード')&&f.value==='**` Pass908! `**'));
+ const tutorial=await action(r.data,component(r.data,'チュートリアルを表示').custom_id);assert.equal(tutorial.type,7);assert.equal(tutorial.data.embeds[0].title,'X垢のログイン方法');
 });
